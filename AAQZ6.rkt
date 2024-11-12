@@ -40,7 +40,7 @@
 (define make-value-vector (inst make-vector Value))
 (define store (make-value-vector 100 (nullV)))
 
-(vector-set! store 0 (numV 10))
+(vector-set! store 0 (numV 14))
 (vector-set! store 1 (boolV #t))
 (vector-set! store 2 (boolV #f))
 (vector-set! store 3 (primV '+))
@@ -182,10 +182,10 @@
     [(list (primV 'make-array) (list size fill))
      (define s (interp size env store))
      (define fv (interp fill env store))
-     (if (and (numV? s) (natural? (numV-n s)))
-         (if (< (numV-n s) 1)
-             (error "AAQZ can only make array with size bigger than or equal to 1 got: ~a" size)
-             (arrV (make-array-helper (numV-n s) fv store) (cast (numV-n s) Integer)))
+     (if (numV? s) 
+         (if (natural? (numV-n s))
+             (arrV (make-array-helper (numV-n s) fv store) (cast (numV-n s) Integer))
+             (error "AAQZ can only make array with size bigger than or equal to 1 got: ~a" size))
          (error "AAQZ needs a number for size to make array but got ~a" size))]
     [(list (primV 'array) (list args ...))
      (if (empty? args)
@@ -195,9 +195,9 @@
      (define got-arr (interp arr env store))
      (define interp-in (interp index env store))
      (if (and (arrV? got-arr) (numV? interp-in))
-         (if (and (> (arrV-size got-arr) (numV-n interp-in)) (> 0 (numV-n interp-in)))
+         (if (and (> (arrV-size got-arr) (numV-n interp-in)) (> (numV-n interp-in) -1))
              (vector-ref store (- (+ (arrV-start got-arr) (cast (numV-n interp-in) Integer)) 1))
-             (error "AAQZ index out of range :P"))
+             (error "AAQZ index out of range :P size is ~a index ~a" (arrV-size got-arr) (numV-n interp-in)))
          (error "AAQZ expects an array and integer as input but got ~a and ~a" arr index))]
     [(list (primV 'aset!) (list arr index value))
            (define got-arr (interp arr env store))
@@ -469,6 +469,41 @@
        [why = 3]
        {(three ((x) => (* x 2))) why}}})
 
+
+(check-equal? (top-interp
+               '{bind [j = {array 3 10}]
+                      j}) "#<array>")
+
+(check-equal? (top-interp
+               '{bind [arr = {make-array 12 2}]
+                      arr}) "#<array>")
+
+(check-equal? (top-interp
+               '{bind [arr = {array 10 20 30 40}]
+                      {seq {aref arr 3}
+                           {aref arr 2}}}) "20")
+
+
+(check-exn #rx"AAQZ needs a number for size to make array but got"
+           (lambda ()
+             (top-interp
+               '{bind [arr = {make-array "stop" 2}]
+                      arr})))
+
+(check-exn #rx"AAQZ can only make array with size bigger than or equal to 1 got:"
+           (lambda () 
+             (top-interp
+               '{bind [arr = {make-array -10 2}]
+                      arr})))
+
+(check-exn #rx"AAQZ cant make an empty array :T"
+           (lambda () 
+             (top-interp
+               '{bind [j = {array}]
+                      j})))
+
+
+
 (check-exn #rx"Number of variables and arguments do not match AAQZ4"
            (lambda ()
              (top-interp
@@ -556,6 +591,7 @@
 (check-exn #rx"Number of variables and arguments do not match AAQZ4"
            (lambda ()
              (top-interp '((() => 9) 17))))
+
 
 
 
