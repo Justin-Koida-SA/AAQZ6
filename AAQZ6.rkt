@@ -1,7 +1,7 @@
 #lang typed/racket
 (require typed/rackunit)
 
-;; Project fully implemented. Plus added in a primitive for random for our game
+;; Project fully implemented. 
 
 (define-type ExprC (U numC stringC idC appC ifC lamC bindC))
 (define-type Value (U numV boolV closV primV stringV arrV nullV))
@@ -38,9 +38,9 @@
 
 ;;initial store
 (define make-value-vector (inst make-vector Value))
-(define store (make-value-vector 100 (nullV)))
+(define store (make-value-vector 200 (nullV)))
 
-(vector-set! store 0 (numV 14))
+(vector-set! store 0 (numV 16))
 (vector-set! store 1 (boolV #t))
 (vector-set! store 2 (boolV #f))
 (vector-set! store 3 (primV '+))
@@ -220,7 +220,7 @@
      (match* (s in-start in-end)
        [((stringV str) (numV (? exact-integer? start)) (numV (? exact-integer? end)))
         (stringV (substring str start end))]
-       [(_ _ _) (error "AAQZ expects input str int int but got ~a  ~a ~a" str start end)])]
+       [(_ _ _) (error "AAQZ expects input str int int for substring but got ~a  ~a ~a" str start end)])]
     [(list (primV 'error) (list v))
      (error "user error " (serialize (interp v env store)))]
     [other (error "wrong number of variable for primV AAQZ4: ~a" other)]))
@@ -309,7 +309,7 @@
     ['() (bindpair '() '())]
     [(cons (list (? symbol? id) '= expr) r)
      (if (hash-has-key? invalid-table id)
-         (error 'parse-binds "Invalid identifier: ~a in AAQZ4" id)
+         (error 'parse-binds "Invalid identifier in AAQZ4 ~a " id)
          (let* ([parsed-rest (parse-binds r)]
                 [ids (cons id (bindpair-funName parsed-rest))]
                 [exprs (cons (parse expr) (bindpair-fun parsed-rest))])
@@ -598,6 +598,81 @@
            (lambda ()
              (top-interp '((() => 9) 17))))
 
+
+
+
+(check-exn #rx"AAQZ index out of range :P size is"
+           (lambda ()
+             (top-interp
+               '{bind [arr = {array 10 20 30 40}]
+                       {aref arr 10}})))
+
+(check-exn #rx"AAQZ expects an array and integer as input but got"
+           (lambda ()
+             (top-interp
+               '{bind [arr = {array 10 20 30 40}]
+                       {aref arr "hey"}})))
+
+(check-exn #rx"AAQZ expects an array and integer as input but got"
+           (lambda ()
+             (top-interp
+               '{bind [arr = {array 10 20 30 40}]
+                       {aset! arr "hey" 30}})))
+
+(check-exn #rx"AAQZ index out of range :P"
+           (lambda ()
+             (top-interp
+               '{bind [arr = {array 10 20 30 40}]
+                       {aset! arr 12 30}})))
+
+(check-exn #rx"AAQZ expects input str int int for substring but got"
+           (lambda ()
+             (top-interp
+               '{substring 20 0 4})))
+
+(check-exn #rx"user error"
+           (lambda ()
+             (top-interp
+               '{error "Testing"})))
+
+(check-exn #rx"AAQZ trying to rebind an unbound variable"
+           (lambda ()
+             (top-interp
+               '{l := 9})))
+
+(check-exn #rx"AAQZ trying to rebind an unbound variable"
+           (lambda ()
+             (top-interp
+               '{bind [j = "hello"]
+                      {k := "heh"}})))
+
+#;(check-exn #rx"Invalid identifier in AAQZ4"
+           (lambda ()
+             (top-interp
+               '{bind [+ = "This is invalid"]
+                      +})))
+
+#;(check-equal? (top-interp
+               '{bind [arr = {array 10 20 30 40}]
+                       {aref arr 10}}) "20")
+
+#;(check-equal? (top-interp
+               '{bind [j = "hello"]
+                      {seq {j := "heh"}
+                           j}}) "heh")
+
+(check-equal? (top-interp
+               '{bind [j = "hello"]
+                      {j := "heh"}}) "null")
+
+
+(check-equal? (top-interp
+               '{bind [arr = {array 10 20 30 40}]
+                       {aset! arr 2 50}}) "null")
+
+
+(check-equal? (top-interp
+               '{substring "Hello World" 0 4}) "\"Hell\"")
 
 
 
