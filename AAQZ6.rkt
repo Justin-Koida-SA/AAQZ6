@@ -54,6 +54,8 @@
 (vector-set! store 11 (primV 'array))
 (vector-set! store 12 (primV 'aref))
 (vector-set! store 13 (primV 'aset!))
+(vector-set! store 14 (primV 'substring))
+(vector-set! store 15 (primV 'error))
 
 ;; top level environment 
 (define top-level-env : Environment
@@ -71,6 +73,8 @@
    (binding 'array 11)
    (binding 'aref 12)
    (binding 'aset! 13)
+   (binding 'substring 14)
+   (binding 'error 15)
    ))
 
 
@@ -217,6 +221,8 @@
        [((stringV str) (numV (? exact-integer? start)) (numV (? exact-integer? end)))
         (stringV (substring str start end))]
        [(_ _ _) (error "AAQZ expects input str int int but got ~a  ~a ~a" str start end)])]
+    [(list (primV 'error) (list v))
+     (error "user error " (serialize (interp v env store)))]
     [other (error "wrong number of variable for primV AAQZ4: ~a" other)]))
 
 (define (make-array-helper [size : Integer] [fill : Value] [store : (Vectorof Value)]) : Integer
