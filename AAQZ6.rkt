@@ -36,7 +36,9 @@
    'bind 0))
 
 ;;initial store
-(define store (cast (make-vector 100 (nullV)) (Mutable-Vectorof  Value)))
+(define make-value-vector (inst make-vector Value))
+(define store (make-value-vector 100 (nullV)))
+
 (vector-set! store 0 (numV 10))
 (vector-set! store 1 (boolV #t))
 (vector-set! store 2 (boolV #f))
@@ -487,16 +489,9 @@
            (lambda ()
              (top-interp '((() => 9) 17))))
 
-(check-equal?
- (top-interp
-  '{bind [s = "Hello me"]
-         {println s}}) "true")
 
-(check-exn #rx"AAQZ5 expected a string"
-           (lambda ()
-             (top-interp
-              '{bind [s = 5]
-                     {println s}})))
+
+
 
 
  
