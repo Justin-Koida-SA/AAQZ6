@@ -11,7 +11,7 @@
 (struct closV [(arg : (Listof Symbol)) (body : ExprC) (env : Environment)])
 (struct primV [(arg : Symbol)])
 (struct stringV [(str : String)])
-(struct arrV [(size : Natural)])
+(struct arrV [(start : Integer) (size : Integer)])
 (struct nullV [])
 
 (struct lamC [(args : (Listof Symbol)) (body : ExprC)] #:transparent)
@@ -49,6 +49,10 @@
 (vector-set! store 7 (primV '<=))
 (vector-set! store 8 (primV 'equal?))
 (vector-set! store 9 (primV 'seq))
+(vector-set! store 10 (primV 'make-array))
+(vector-set! store 11 (primV 'array))
+(vector-set! store 12 (primV 'aref))
+(vector-set! store 13 (primV 'aset!))
 
 ;; top level environment 
 (define top-level-env : Environment
@@ -61,7 +65,12 @@
    (binding '* 6)
    (binding '<= 7)
    (binding 'equal? 8)
-   (binding 'seq 9)))
+   (binding 'seq 9)
+   (binding 'make-array 10)
+   (binding 'array 11)
+   (binding 'aref 12)
+   (binding 'aset! 13)
+   ))
 
 
 
@@ -160,16 +169,22 @@
                                (interp (cast expr ExprC) env store))
                              args)])
        (last interp-args))]
-    #;[(list (primV 'make-array) (list size fVal))
+    [(list (primV 'make-array) (list size fill))
      (if (< size 1)
          (error "AAQZ can only make array with size bigger than or equal to 1 got: ~a" size)
-         ("temp code ignore"))]
+         ("IGNORE"))]
+    
     [other (error "wrong number of variable for primV AAQZ4: ~a" other)]))
 
 
+ 
 
-
-
+(define (make-array-helper [size : numV] [start : numV] [fill : Value]) : Integer
+  (match
+    [(equal? size 0) start]
+    [else (make-array-helper (- size 1) (start) (fill))])
+  
+  )
 
 ;; takes in a closure and a list of values and extends the closure's environment
 ;;by binding closure's syms to the list of values and evaluates the body with the new environment
