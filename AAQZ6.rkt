@@ -4,7 +4,7 @@
 ;; Project fully implemented. Plus added in a primitive for random for our game
 
 (define-type ExprC (U numC stringC idC appC ifC lamC))
-(define-type Value (U numV boolV closV primV stringV nullV))
+(define-type Value (U numV boolV closV primV stringV arrV nullV))
 
 (struct numV[(n : Real)] #:transparent)
 (struct boolV[(bool : Boolean)] #:transparent)
@@ -71,7 +71,6 @@
    (binding 'aref 12)
    (binding 'aset! 13)
    ))
-
 
 
 ;; takes in a symbol to be looked up in an environment and returns its corresponding value
@@ -170,21 +169,43 @@
                              args)])
        (last interp-args))]
     [(list (primV 'make-array) (list size fill))
-     (if (< size 1)
-         (error "AAQZ can only make array with size bigger than or equal to 1 got: ~a" size)
-         ("IGNORE"))]
-    
+     (define s (interp size env store))
+     (define fv (interp fill env store))
+     (if (and (numV? s) (natural? (numV-n s)))
+         (if (< (numV-n s) 1)
+             (error "AAQZ can only make array with size bigger than or equal to 1 got: ~a" size)
+             (arrV (make-array-helper (numV-n s) fv store) (cast (numV-n s) Integer)))
+         (error "AAQZ needs a number for size to make array but got ~a" size))]
+    [(list (primV 'array) (list args ...))
+     (if (empty? args)
+         (error "AAQZ cant make an empty array :T")
+         (arrV (array-helper (map (lambda (arg) (interp (cast arg ExprC) env store)) args) store) (length args)))]
+    [(list (primV 'aref) (list arr index))
+     (define got-arr (interp arr env store))
+     (define interp-in (interp index env store))
+     (if (and (arrV? got-arr) (numV? interp-in))
+         (if (> (arrV-size got-arr) (numV-n interp-in))
+             (vector-ref store (- (+ (arrV-start got-arr) (cast (numV-n interp-in) Integer)) 1))
+             (error "AAQZ index out of range :P"))
+         (error "AAQZ expects an array and integer as input but got ~a and ~a" arr index))
+         ]
     [other (error "wrong number of variable for primV AAQZ4: ~a" other)]))
 
+(define (make-array-helper [size : Integer] [fill : Value] [store : (Vectorof Value)]) : Integer
+  (if (equal? size 0)
+      0
+      (begin
+        (make-array-helper (- size 1) fill store)
+        (- (update-store fill store) (- size 1)))))
 
- 
-
-(define (make-array-helper [size : numV] [start : numV] [fill : Value]) : Integer
-  (match
-    [(equal? size 0) start]
-    [else (make-array-helper (- size 1) (start) (fill))])
-  
-  )
+(define (array-helper [content : (Listof Value)] [store : (Vectorof Value)]) : Integer
+  (match content
+    ['() 0]
+    [(cons c r)
+     (begin
+       (define ret (update-store c store))
+       (array-helper r store)
+       ret)]))
 
 ;; takes in a closure and a list of values and extends the closure's environment
 ;;by binding closure's syms to the list of values and evaluates the body with the new environment
