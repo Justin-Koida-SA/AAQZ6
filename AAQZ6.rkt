@@ -3,7 +3,7 @@
 
 ;; Project fully implemented. Plus added in a primitive for random for our game
 
-(define-type ExprC (U numC stringC idC appC ifC lamC))
+(define-type ExprC (U numC stringC idC appC ifC lamC bindC))
 (define-type Value (U numV boolV closV primV stringV arrV nullV))
 
 (struct numV[(n : Real)] #:transparent)
@@ -20,6 +20,7 @@
 (struct numC[(n : Real)] #:transparent)
 (struct stringC[(str : String)] #:transparent)
 (struct ifC [(test : ExprC) (then : ExprC) (else : ExprC)] #:transparent)
+(struct bindC [(sym : Symbol) (new : ExprC)])
 
 (define-type Environment (Listof binding))
 (struct binding [(bound : Symbol) (index : Integer)] #:transparent)
@@ -102,6 +103,7 @@
     [(stringC str) (stringV str)]
     [(idC n) (lookup n env store)]
     [(lamC args body) (closV args body env)]
+    [(bindC sym new) (rebind sym new env store)]
     [(appC f a)
      (define resolved-f (interp f env store))
      (match resolved-f
@@ -116,6 +118,15 @@
          (interp then env store)
          (interp else env store))]))
 
+(define (rebind [s : Symbol] [new : ExprC] [env : Environment] [store : (Vectorof Value)]) : nullV
+  (match env
+    ['() (error "AAQZ trying to rebind an unbound variable ~a" s)]
+    [(cons (binding sym location) r)
+     (if (equal? sym s)
+         (begin
+           (vector-set! store location (interp new env store))
+           (nullV))
+         (rebind s new r store))]))
 
 ;; takes in a primV operation, arguments in the form of Listof ExprC, and an environment.
 ;; Matches the operation to its corresponding functionality and returns the evaluated
@@ -183,12 +194,29 @@
     [(list (primV 'aref) (list arr index))
      (define got-arr (interp arr env store))
      (define interp-in (interp index env store))
-     (if (or (arrV? got-arr) (numV? interp-in))
-         (if (or (> (arrV-size got-arr) (numV-n interp-in)) (> 0 (numV-n interp-in)))
+     (if (and (arrV? got-arr) (numV? interp-in))
+         (if (and (> (arrV-size got-arr) (numV-n interp-in)) (> 0 (numV-n interp-in)))
              (vector-ref store (- (+ (arrV-start got-arr) (cast (numV-n interp-in) Integer)) 1))
              (error "AAQZ index out of range :P"))
-         (error "AAQZ expects an array and integer as input but got ~a and ~a" arr index))
-         ]
+         (error "AAQZ expects an array and integer as input but got ~a and ~a" arr index))]
+    [(list (primV 'aset!) (list arr index value))
+           (define got-arr (interp arr env store))
+           (define interp-in (interp index env store))
+           (if (and (arrV? got-arr) (numV? interp-in))
+               (if (or (> (arrV-size got-arr) (numV-n interp-in)) (> 0 (numV-n interp-in)))
+                   (begin (vector-set! store (exact-round (- (+ (arrV-start got-arr) (numV-n interp-in)) 1))
+                                       (interp value env store))
+                          (nullV))
+                   (error "AAQZ index out of range :P"))
+               (error "AAQZ expects an array and integer as input but got ~a and ~a" arr index))]
+    [(list (primV 'substring) (list str start end))
+     (define s (interp str env store))
+     (define in-start (interp start env store))
+     (define in-end (interp end env store))
+     (match* (s in-start in-end)
+       [((stringV str) (numV (? exact-integer? start)) (numV (? exact-integer? end)))
+        (stringV (substring str start end))]
+       [(_ _ _) (error "AAQZ expects input str int int but got ~a  ~a ~a" str start end)])]
     [other (error "wrong number of variable for primV AAQZ4: ~a" other)]))
 
 (define (make-array-helper [size : Integer] [fill : Value] [store : (Vectorof Value)]) : Integer
@@ -257,6 +285,8 @@
      (cond
        [(not (andmap symbol? args)) (error 'parse "AAQZ Expected a list of symbols for arguments got ~a" args)]
        [else (lamC (check-duplicate-arg args) (parse body))])]
+    [(list (? symbol? s) ':= new)
+     (bindC s (parse new))]
     [(? real? n) (numC n)]
     [(? string? str) (stringC str)]
     [(list 'if test then else) (ifC (parse test) (parse then) (parse else))]
