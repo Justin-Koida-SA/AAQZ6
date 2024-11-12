@@ -221,7 +221,9 @@
     [(stringV str) (~v str)]
     [(boolV bool) (if bool "true" "false")]
     [(closV _ _ _) "#<procedure>"]
-    [(primV _) "#<primop>"]))
+    [(primV _) "#<primop>"]
+    [(nullV) "null"]
+    [(arrV _ _) "#<array>"]))
 
 ;;takes in an S-expression and parses it into our AAQZ4 language in the form of an ExprC.
 ;;Checks for invalid syntaxes and invalid identifiers.
