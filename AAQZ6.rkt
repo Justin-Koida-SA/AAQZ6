@@ -4,13 +4,15 @@
 ;; Project fully implemented. Plus added in a primitive for random for our game
 
 (define-type ExprC (U numC stringC idC appC ifC lamC))
-(define-type Value (U numV boolV closV primV stringV))
+(define-type Value (U numV boolV closV primV stringV nullV))
 
 (struct numV[(n : Real)] #:transparent)
 (struct boolV[(bool : Boolean)] #:transparent)
 (struct closV [(arg : (Listof Symbol)) (body : ExprC) (env : Environment)])
 (struct primV [(arg : Symbol)])
 (struct stringV [(str : String)])
+(struct arrV [(size : Natural)])
+(struct nullV [])
 
 (struct lamC [(args : (Listof Symbol)) (body : ExprC)] #:transparent)
 (struct appC [(func : ExprC) (args : (Listof ExprC))] #:transparent)
@@ -20,7 +22,7 @@
 (struct ifC [(test : ExprC) (then : ExprC) (else : ExprC)] #:transparent)
 
 (define-type Environment (Listof binding))
-(struct binding [(bound : Symbol) (val : Value)] #:transparent)
+(struct binding [(bound : Symbol) (index : Integer)] #:transparent)
 
 (struct bindpair [(funName : (Listof Symbol)) (fun : (Listof ExprC))])
 
@@ -33,32 +35,42 @@
    '= 0
    'bind 0))
 
+;;initial store
+(define store (cast (make-vector 100 (nullV)) (Mutable-Vectorof  Value)))
+(vector-set! store 0 (numV 10))
+(vector-set! store 1 (boolV #t))
+(vector-set! store 2 (boolV #f))
+(vector-set! store 3 (primV '+))
+(vector-set! store 4 (primV '-))
+(vector-set! store 5 (primV '/))
+(vector-set! store 6 (primV '*))
+(vector-set! store 7 (primV '<=))
+(vector-set! store 8 (primV 'equal?))
+(vector-set! store 9 (primV 'seq))
+
 ;; top level environment 
 (define top-level-env : Environment
   (list
-   (binding 'true (boolV #t))
-   (binding 'false (boolV #f))
-   (binding '+ (primV '+))
-   (binding '- (primV '-))
-   (binding '/ (primV '/))
-   (binding '* (primV '*))
-   (binding '<= (primV '<=))
-   (binding 'equal? (primV 'equal?))
-   (binding 'println (primV 'println))
-   (binding 'read-num (primV 'read-num))
-   (binding 'read-str (primV 'read-str))
-   (binding 'seq (primV 'seq))
-   (binding '++ (primV '++))
-   (binding 'random (primV 'random))))
+   (binding 'true 1)
+   (binding 'false 2)
+   (binding '+ 3)
+   (binding '- 4)
+   (binding '/ 5)
+   (binding '* 6)
+   (binding '<= 7)
+   (binding 'equal? 8)
+   (binding 'seq 9)))
+
+
 
 ;; takes in a symbol to be looked up in an environment and returns its corresponding value
-(define (lookup [for : Symbol] [env : Environment]) : Value
+(define (lookup [for : Symbol] [env : Environment] [store : (Vectorof Value)]) : Value
   (match env
     ['() (error 'lookup "user-error AAQZ4 found an unbound variable: ~a ~a" for env)]
-    [(cons (binding name val) rest)
+    [(cons (binding name (? natural? location)) rest)
      (if (symbol=? for name)
-         val
-         (lookup for rest))]))
+         (vector-ref store location)
+         (lookup for rest store))]))
 
 ;; takes in two environments and combines them into one environment
 (define (extend-env [env : Environment] [news : Environment]) : Environment
@@ -66,152 +78,125 @@
     ['() env]
     [(cons f r) (cons f (extend-env env r))]))
 
+
 ;; parses, then interprets a given program in the form of an Sexpr, then calls the serialize
 ;; function to turn it into a string
 (define (top-interp [prog : Sexp]) : String
-  (serialize (interp (parse prog) top-level-env)))
+  (serialize (interp (parse prog) top-level-env store)))
 
 ;; Takes in an ExprC and an Environment and returns a Value representing the
 ;; interpreted program.
-(define (interp [expr : ExprC] [env : Environment]) : Value
+(define (interp [expr : ExprC] [env : Environment] [store : (Vectorof Value)]) : Value
   (match expr
     [(numC n) (numV n)]
     [(stringC str) (stringV str)]
-    [(idC n) (lookup n env)]
+    [(idC n) (lookup n env store)]
     [(lamC args body) (closV args body env)]
     [(appC f a)
-     (define resolved-f (interp f env))
+     (define resolved-f (interp f env store))
      (match resolved-f
-       [(primV _) (do-math resolved-f a env)]
-       [(closV args body nenv) (app-intrp-helper resolved-f (interp-args a env))]
+       [(primV _) (do-math resolved-f a env store)]
+       [(closV args body nenv) (app-intrp-helper resolved-f (interp-args a env store) store)]
        [other (error "AAQZ4 needs a function that we can apply got: ~a" other)])]
     [(ifC test then else)
-     (define interped-test (interp test env))
+     (define interped-test (interp test env store))
      (if (if (boolV? interped-test) 
              (boolV-bool interped-test)
              (error "AAQZ4 needs a bool to do if ops"))
-         (interp then env)
-         (interp else env))]))
+         (interp then env store)
+         (interp else env store))]))
 
 
 ;; takes in a primV operation, arguments in the form of Listof ExprC, and an environment.
 ;; Matches the operation to its corresponding functionality and returns the evaluated
 ;; operation.
-(define (do-math [op : primV] [arg : (Listof ExprC)] [env : Environment]) : Value
+(define (do-math [op : primV] [arg : (Listof ExprC)] [env : Environment] [store : (Vectorof Value)]) : Value
   (match  (list op arg)
     [(list (primV '+) (list l r)) 
-     (define interp-l (interp l env))
-     (define interp-r (interp r env))
+     (define interp-l (interp l env store))
+     (define interp-r (interp r env store))
      (if (and (numV? interp-l) (numV? interp-r))
          (numV (+ (numV-n interp-l) (numV-n interp-r)))
          (error  "AAQZ4 need an integer with ~a operator" '+))]
     [(list (primV '-) (list l r))
-     (define interp-l (interp l env))
-     (define interp-r (interp r env))
+     (define interp-l (interp l env store))
+     (define interp-r (interp r env store))
      (if (and (numV? interp-l) (numV? interp-r))
          (numV (- (numV-n interp-l) (numV-n interp-r)))
          (error  "AAQZ4 need an integer with ~a operator" '-))]
     [(list (primV '*) (list l r))
-     (define interp-l (interp l env))
-     (define interp-r (interp r env))
+     (define interp-l (interp l env store))
+     (define interp-r (interp r env store))
      (if (and (numV? interp-l) (numV? interp-r))
          (numV (* (numV-n interp-l) (numV-n interp-r)))
          (error  "AAQZ4 need an integer with ~a operator" '*))]
     [(list (primV '/) (list l r))
-     (define interp-l (interp l env))
-     (define interp-r (interp r env))
+     (define interp-l (interp l env store))
+     (define interp-r (interp r env store))
      (if (and (numV? interp-l) (numV? interp-r))
          (if (not (= (numV-n interp-r) 0))
              (numV (/ (numV-n interp-l) (numV-n interp-r)))
              (error "AAQZ4 cant divide by zero"))
          (error  "AAQZ4 need an integer with ~a operator" '/))]
     [(list (primV '<=) (list l r))
-     (define interp-l (interp l env))
-     (define interp-r (interp r env))
+     (define interp-l (interp l env store))
+     (define interp-r (interp r env store))
      (if (and (numV? interp-l) (numV? interp-r))
          (boolV (<= (numV-n interp-l) (numV-n interp-r)))
          (error  "AAQZ4 need an integer with ~a operator" '<=))]
     [(list (primV 'equal?) (list l r))
-     (define interp-l (interp l env))
-     (define interp-r (interp r env))
+     (define interp-l (interp l env store))
+     (define interp-r (interp r env store))
      (cond
        [(and (numV? interp-l) (numV? interp-r)) (boolV (= (numV-n interp-l) (numV-n interp-r)))]
        [(and (stringV? interp-l) (stringV? interp-r))
         (boolV (string=? (stringV-str interp-l) (stringV-str interp-r)))]
        [(and (boolV? interp-l) (boolV? interp-r)) (boolV (eq? (boolV-bool interp-l) (boolV-bool interp-r)))]
        [else (boolV #f)])]
-    [(list (primV 'println) (list s))
-     (define interp-s (interp s env))
-     (if (stringV? interp-s)
-         (printf "~a~n"(stringV-str interp-s))
-         (error "AAQZ5 expected a string"))
-     (boolV #t)]
-    [(list (primV 'read-num) '())
-     (display ">")
-     (define input (read-line))
-     (match input
-       [(? string?)
-        (define num (string->number input))
-        (match num
-          [(? real?) (numV num)]
-          [_ (error "input was not a real number for read-num in AAQZ5 ~v" input)])]
-       [_ (error "no input provided in AAQZ5 ~a")])]
-    [(list (primV 'read-str) '())
-     (display ">")
-     (define input (read-line))
-     (match input
-       [(? string?) (stringV input)] 
-       [_ (error "no input provided in read-str AAQZ5 ~a")])]
     [(list (primV 'seq) (list args ...))
      (let ([interp-args (map (lambda (expr)
-                               (interp (cast expr ExprC) env))
+                               (interp (cast expr ExprC) env store))
                              args)])
        (last interp-args))]
-    [(list (primV '++) (list args ...))
-     (stringV (append-values (map (lambda (expr) (interp (cast expr ExprC) env)) args)))]
-    [(list (primV 'random) (list num))
-     (define interp-num (interp num env))
-     (if (and (numV? interp-num) (>= (numV-n interp-num) 0))
-         (numV (random (cast (numV-n interp-num) Integer)))
-     (error  "AAQZ5 needs an integer with ~a operator" 'random))]
+    #;[(list (primV 'make-array) (list size fVal))
+     (if (< size 1)
+         (error "AAQZ can only make array with size bigger than or equal to 1 got: ~a" size)
+         ("temp code ignore"))]
     [other (error "wrong number of variable for primV AAQZ4: ~a" other)]))
 
 
-(define (append-values [values : (Listof Value)]) : String
-  (match values
-    ['() ""]
-    [(cons v rest)
-     (string-append (value->string v) (append-values rest))]))
 
 
-(define (value->string [v : Value]) : String
-  (match v
-    [(stringV str) str]
-    [(numV n) (number->string n)]
-    [(boolV b) (if b "true" "false")]
-    [_ (error "Expected a stringV, numV, or boolV value for concatenation")]))
+
 
 ;; takes in a closure and a list of values and extends the closure's environment
 ;;by binding closure's syms to the list of values and evaluates the body with the new environment
-(define (app-intrp-helper [closer : closV] [args : (Listof Value)]) : Value
+(define (app-intrp-helper [closer : closV] [args : (Listof Value)] [store : (Vectorof Value)]) : Value
   (match closer
-    [(closV syms body env) (interp body (extend-env env (bind syms args)))]))
+    [(closV syms body env) (interp body (extend-env env (bind syms args store)) store)]))
 
 ;; takes in a list of symbols and a list of values and creates a binding for each
 ;; corresponding symbol value pair. The bindings are then put into an Environment
-(define (bind [l1 : (Listof Symbol)] [l2 : (Listof Value)]) : Environment
+(define (bind [l1 : (Listof Symbol)] [l2 : (Listof Value)] [store : (Vectorof Value)]) : Environment
   (match (list l1 l2)
     [(list '() '()) '()]
-    [(list (cons f1 r1) (cons f2 r2)) (cons (binding f1 f2) (bind r1 r2))]
+    [(list (cons f1 r1) (cons f2 r2)) (cons (binding f1 (update-store f2 store)) (bind r1 r2 store))]
     [other (error 'bind "Number of variables and arguments do not match AAQZ4: ~a" other)]))
+
+;;takes in a value and a store and return the location that the value has been stored to
+(define (update-store [store-val : Value] [store : (Vectorof Value)]) : Integer
+  (define available (exact-round (numV-n (cast (vector-ref store 0) numV))))
+  (vector-set! store available store-val)
+  (vector-set! store 0 (numV (+ available 1)))
+  available)
 
 ;; takes in a list of ExprC representing args, and an Environment. Interprets everything
 ;; in the list of ExprC into a list of Values 
-(define (interp-args [args : (Listof ExprC)] [env : Environment]) : (Listof Value)
+(define (interp-args [args : (Listof ExprC)] [env : Environment] [store : (Vectorof Value)]) : (Listof Value)
   (match args
     ['() '()]
-    [(cons other r) (cons (interp other env) (interp-args r env))]))
- 
+    [(cons other r) (cons (interp other env store) (interp-args r env store))]))
+
 ;; Takes in a type Value and turns that value into a String
 (define (serialize [v : Value]) : String 
   (match v
@@ -409,7 +394,6 @@
                          ((f) =>
                               ((x) =>
                                    ((m f) ((n f) x))))) }]
-      
       {bind
        [three = {(add one) two}]
        [why = 3]
@@ -514,114 +498,9 @@
               '{bind [s = 5]
                      {println s}})))
 
-(check-equal? (top-interp '(seq (println "printing stuff for seq")(++ 8 "cat" false))) "\"8catfalse\"")
 
  
 
-
-
-
-(define example-program
-  '{seq
-    {println "This is the number game. The goal of this game is to get the enemy health to 0.
-You and the enemy (computer) start with 1000 health points each. Each turn, you
-input a number between 0 and 100. If that number is below a randomly generated
-number (0 to 100) Then you deal x amount of damage to the enemy. If your input
-is above the randomly generated number, you take x amount of damage. Don’t die
-before the enemy or you lose!"}
-    {println "What is your name? "}
-    {bind
-     [name = {read-str}]
-     [hp = 1000]
-     [enemy-hp = 1000]
-     [check-guess = {(self) => {bind [new-guess = {read-num}]
-                                     {if (<= 0 new-guess)
-                                         {if (<= new-guess 100)
-                                             new-guess
-                                             {seq {println "Invalid Number, input a new number between 0 and 100"}
-                                                  {self self}}}
-                                         {seq {println "Invalid Number, input a new number between 0 and 100"}
-                                              {self self}}}}}]
-     {seq
-      {println "Input a number between 0 and 100"}
-      {bind
-       [guess = {check-guess check-guess}]
-       [first-rand = {random 100}]       
-       {bind
-        [play =
-              {(hp enemy-hp guess rand self) =>
-                                             {if (<= guess rand)
-                                                 {if {<= {- enemy-hp guess} 0} {println {++ "Amazing victory " name}} 
-                                                     {seq
-                                                      {println {++ "you dealt " guess " damage"}}
-                                                      {bind
-                                                       [new-guess = {check-guess check-guess}]
-                                                       {self hp {- enemy-hp new-guess} new-guess {random 100} self}}}}
-                                                 {if
-                                                  {<= {- hp guess} 0} 
-                                                  {println
-                                                   {++ name ", you lost a number game you failed. Uh oh."}}
-                                                  {seq
-                                                   {println {++ "you lost " guess " health"}}
-                                                   {bind
-                                                    [new-guess = {check-guess check-guess}]
-                                                    {self {- hp new-guess} enemy-hp new-guess {random 100} self}}}}}}]
-        {play hp enemy-hp guess first-rand play}}}}}})
-
-                                                                   
-  
-
-
-;;Example program text:
-;; This is the number game. The goal of this game is to get the enemy health to 0.
-;; You and the enemy (computer) start with 1000 health points each. Each turn, you
-;; input a number between 0 and 100. If that number is below a randomly generated
-;; number (0 to 100) Then you deal x amount of damage to the enemy. If your input
-;; is above the randomly generated number, you take x amount of damage. Don’t die
-;; before the enemy or you lose!
-;; What is your name?
-;; >Justin
-;; Input a number between 0 and 100
-;; >100
-;; you lost 100 health
-;; >1000
-;; Invalid Number, input a new number between 0 and 100
-;; >-50
-;; Invalid Number, input a new number between 0 and 100
-;; >100
-;; you lost 100 health
-;; >40
-;; you dealt 40 damage
-;; >30
-;; you dealt 30 damage
-;; >100
-;; you lost 100 health
-;; >90
-;; you lost 90 health
-;; >25
-;; you lost 25 health
-;; >94
-;; you lost 94 health
-;; >94
-;; you lost 94 health
-;; >92
-;; you lost 92 health
-;; >10
-;; you dealt 10 damage
-;; >99
-;; you lost 99 health
-;; >99
-;; you lost 99 health
-;; >97
-;; you lost 97 health
-;; >10
-;; you dealt 10 damage
-;; >032
-;; you dealt 32 damage
-;; >96
-;; you lost 96 health
-;; >97
-;; >Justin, you lost a number game you failed. Uh oh.
 
 
 
