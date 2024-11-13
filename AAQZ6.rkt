@@ -206,7 +206,7 @@
      (define interp-in (interp index env store))
      (if (and (arrV? got-arr) (numV? interp-in))
          (if (and (> (arrV-size got-arr) (numV-n interp-in)) (> (numV-n interp-in) -1))
-             (vector-ref store (- (+ (arrV-start got-arr) (cast (numV-n interp-in) Integer)) 1))
+             (vector-ref store (+ (arrV-start got-arr) (cast (numV-n interp-in) Integer)))
              (error "AAQZ index out of range :P size is ~a index ~a" (arrV-size got-arr) (numV-n interp-in)))
          (error "AAQZ expects an array and integer as input but got ~a and ~a" arr index))]
     [(list (primV 'aset!) (list arr index value))
@@ -504,10 +504,11 @@
                '{bind [arr = {make-array 12 2}]
                       arr} 100) "#<array>")
 
+
 (check-equal? (top-interp
                '{bind [arr = {array 10 20 30 40}]
                       {seq {aref arr 3}
-                           {aref arr 2}}} 100) "20")
+                           {aref arr 1}}} 100) "20")
 
 
 (check-exn #rx"AAQZ needs a number for size to make array but got"
@@ -638,7 +639,7 @@
              (top-interp
                '{bind [arr = {array 10 20 30 40}]
                        {aset! arr "hey" 30}} 100)))
-
+ 
 (check-exn #rx"AAQZ index out of range :P"
            (lambda ()
              (top-interp
@@ -678,7 +679,14 @@
 
 (check-equal? (top-interp
                '{bind [arr = {array 10 20 30 40}]
-                       {aset! arr 2 50}} 100) "null")
+                       
+                        {aref arr 1}} 100) "20")
+
+(check-equal? (top-interp
+               '{bind [arr = {array 0}]
+                       {seq
+                        {aset! arr 0 50}
+                        {aref arr 0}}} 100) "0")
 
 
 (check-equal? (top-interp
@@ -730,10 +738,10 @@
 (define while
   '{(c b ba) =>
              {bind [while = "bogus"]
-                   {seq {while := {(cond body base) =>
+                   {seq {while := {(cond body) =>
                                                     {if {cond}
                                                         {seq {body} {while cond body}}
-                                                        base}}}
+                                                        nullV}}}
                         {while c b ba}}}})
 
 #;(top-interp (while) 100)
@@ -742,16 +750,18 @@
   '{(arr size) =>
                {bind [inorder ="bogus"]
                      [index = 0]
+                     [increasing = true]
                      {seq {inorder := {(array size) =>
-                                                    {{while}
-                                                     (<= size (+ index 1))
-                                                     (if (<= (aref array (+ 1 index)) (aref array index))
-                                                             false
-                                                             (seq
-                                                              {index := {+ 1 index}}
-                                                              (inorder array size)))
-                                                     true
-                                                     }}}
+                                                    {seq
+                                                     {while
+                                                      (<= size (+ index 1))
+                                                      (if (<= (aref array (+ 1 index)) (aref array index))
+                                                          (increasing := false)
+                                                          (seq
+                                                           {index := {+ 1 index}}
+                                                           (inorder array size)))
+                                                      }
+                                                     increasing}}}
               {inorder arr siz}}}})
 
 #;(if (<= size (+ index 1))
