@@ -38,7 +38,7 @@
 
 ;;initial store
 (define make-value-vector (inst make-vector Value))
-(define store (make-value-vector 200 (nullV)))
+(define store (make-value-vector 300 (nullV)))
 
 (vector-set! store 0 (numV 16))
 (vector-set! store 1 (boolV #t))
@@ -179,10 +179,8 @@
        [(and (boolV? interp-l) (boolV? interp-r)) (boolV (eq? (boolV-bool interp-l) (boolV-bool interp-r)))]
        [else (boolV #f)])]
     [(list (primV 'seq) (list args ...))
-     (let ([interp-args (map (lambda (expr)
-                               (interp (cast expr ExprC) env store))
-                             args)])
-       (last interp-args))]
+     (last (interp-expr-list args env store))
+     ]
     [(list (primV 'make-array) (list size fill))
      (define s (interp size env store))
      (define fv (interp fill env store))
@@ -231,6 +229,12 @@
       (begin
         (make-array-helper (- size 1) fill store)
         (- (update-store fill store) (- size 1)))))
+
+(define (interp-expr-list [exprs : (Listof ExprC)] [env : Environment] [store : (Vectorof Value)]) : (Listof Value)
+  (match exprs
+    ['() '()]
+    [(cons first rest)
+     (cons (interp first env store) (interp-expr-list rest env store))]))
 
 (define (array-helper [content : (Listof Value)] [store : (Vectorof Value)]) : Integer
   (match content
@@ -333,6 +337,9 @@
          (check-duplicate-arg-helper new rest))]))
  
 ;;test
+
+
+
 (check-equal? (parse
                '{bind [x = 5]
                       [y = 7]
@@ -646,6 +653,24 @@
                '{bind [j = "hello"]
                       {k := "heh"}})))
 
+
+(check-equal? (top-interp
+               '{bind [j = "hello"]
+                      {j := "heh"}}) "null")
+
+(check-equal? (top-interp
+               '{bind [j = "hello"]
+                      {seq {j := "heh"} j}}) "\"heh\"")
+
+
+(check-equal? (top-interp
+               '{bind [arr = {array 10 20 30 40}]
+                       {aset! arr 2 50}}) "null")
+
+
+(check-equal? (top-interp
+               '{substring "Hello World" 0 4}) "\"Hell\"")
+
 #;(check-exn #rx"Invalid identifier in AAQZ4"
            (lambda ()
              (top-interp
@@ -661,18 +686,7 @@
                       {seq {j := "heh"}
                            j}}) "heh")
 
-(check-equal? (top-interp
-               '{bind [j = "hello"]
-                      {j := "heh"}}) "null")
 
-
-(check-equal? (top-interp
-               '{bind [arr = {array 10 20 30 40}]
-                       {aset! arr 2 50}}) "null")
-
-
-(check-equal? (top-interp
-               '{substring "Hello World" 0 4}) "\"Hell\"")
 
 
 
