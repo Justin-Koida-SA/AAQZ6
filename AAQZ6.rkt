@@ -342,7 +342,8 @@
          (let* ([parsed-rest (parse-binds r)]
                 [ids (cons id (bindpair-funName parsed-rest))]
                 [exprs (cons (parse expr) (bindpair-fun parsed-rest))])
-           (bindpair ids exprs)))]))
+           (bindpair ids exprs)))]
+    [other (error "Not correct binding format in AAQZ")]))
 
 ;;takes in a list of symbols representing arguments and checks if there are any duplicate names for
 ;;arguments in the given list using check-duplicate-arg-helper. Returns the list of arguments.
@@ -364,6 +365,401 @@
 ;;test
 
 
+
+
+(check-equal? (parse
+               '{bind [x = 5]
+                      [y = 7]
+                      {+ x y}})
+              (appC (lamC '(x y)
+                          (appC (idC '+)
+                                (list (idC 'x)
+                                      (idC 'y))))
+                    (list (numC 5) (numC 7))))
+
+(check-equal? (parse
+               '{bind [x = 5]
+                      [y = 7]
+                      {+ x y}})
+              (appC (lamC '(x y)
+                          (appC (idC '+)
+                                (list (idC 'x)
+                                      (idC 'y))))
+                    (list (numC 5) (numC 7))))
+
+(check-equal? (parse
+               '{{(add1) => {add1 42}}
+                {(x) => {+ x 1}}})
+              (appC (lamC '(add1) (appC (idC 'add1)
+                                        (list (numC 42))))
+                    (list (lamC '(x) (appC (idC '+)
+                                           (list (idC 'x)
+                                                 (numC 1)))))))
+(check-equal? (parse
+               '{{(x y) => {+ x y}}
+                5 7}) (appC (lamC '(x y)
+                                  (appC (idC '+)
+                                        (list (idC 'x)
+                                              (idC 'y))))
+                            (list (numC 5) (numC 7)))) 
+
+(check-equal? (top-interp
+               '{if false 3 23} 100) "23")
+
+(check-equal? (top-interp
+               '{{(add1) => {add1 42}}
+                {(x) => {+ x 1}}} 100) "43")
+
+(check-equal? (top-interp
+               '{{(min1) => {min1 42}}
+                {(x) => {- x 1}}} 100) "41")
+
+(check-equal? (top-interp
+               '{{(mult2) => {mult2 42}}
+                {(x) => {* x 2}}} 100) "84")
+
+(check-equal? (top-interp
+               '{{(div3) => {div3 9}}
+                {(x) => {/ x 3}}} 100) "3")
+
+(check-equal? (top-interp
+               '{{(bigger-than-2) => {bigger-than-2 4}}
+                {(x) => {<= 2 x}}} 100) "true")
+
+(check-equal? (top-interp
+               '{{(bigger-than-2) => {bigger-than-2 4}}
+                {(x) => {<= 2 x}}} 100) "true")
+
+(check-equal? (top-interp
+               '{{(same-as-2) => {same-as-2 2}}
+                {(x) => {equal? 2 x}}} 100) "true")
+
+(check-equal? (top-interp
+               '{{(same-as-2) => {same-as-2 3}}
+                {(x) => {equal? 2 x}}} 100) "false")
+
+(check-equal? (top-interp
+               '{{(same-as-str-2) => {same-as-str-2 "2"}}
+                {(x) => {equal? "2" x}}} 100) "true")
+
+(check-equal? (top-interp
+               '{{(same-as-str-2) => {same-as-str-2 "3"}}
+                {(x) => {equal? "2" x}}} 100) "false")
+
+(check-equal? (top-interp
+               '{{(same-bool) => {same-bool false}}
+                {(x) => {equal? false x}}} 100) "true")
+
+(check-equal? (top-interp
+               '{{(same-bool) => {same-bool false}}
+                {(x) => {equal? true x}}} 100) "false")
+
+
+(check-equal? (top-interp
+               '{{(noArg) => {noArg}}
+                {() => 3}} 100) "3")
+
+(check-equal? (top-interp
+               '43 100) "43")
+
+(check-equal? (top-interp
+               '"dogs" 100) "\"dogs\"")
+
+(check-equal? (top-interp
+               'true 100) "true")
+(check-equal? (top-interp
+               'false 100) "false")
+
+(check-equal? (top-interp
+               '{(x) => {* x 2}} 100) "#<procedure>")
+
+(check-equal? (top-interp
+               '* 100) "#<primop>")
+
+
+(check-equal? (top-interp '(+ 2 3) 100) "5")
+(check-equal? (top-interp '{if true 34 39} 100) "34")
+(check-equal? (top-interp '{{(x y) => {+ x y}} 4 3} 100) "7")
+
+(check-exn #rx"AAQZ4 found a syntax error repeated argument name\n"
+           (lambda ()
+             (top-interp
+               '{{(add1) => {add1 42}}
+                {(x x) => {+ x 1}}} 100)))
+
+(check-equal?
+ (top-interp
+  '{bind [x = 5]
+         [y = 7]
+         {+ x y}} 100) "12")
+(check-equal?
+ (top-interp
+  '{bind  12} 100) "12")
+
+(top-interp '{ bind 
+      [one = { (f) => ((v) => (f v)) }]
+      [two = { (f) => ((v) => (f (f v))) }]
+      [add = { (m) =>
+                    ((n) =>
+                         ((f) =>
+                              ((x) =>
+                                   ((m f) ((n f) x))))) }]
+      {bind
+       [three = {(add one) two}]
+       [why = 3]
+       {(three ((x) => (* x 2))) why}}} 100)
+
+
+(check-equal? (top-interp
+               '{bind [j = {array 3 10}]
+                      j} 100) "#<array>")
+
+(check-equal? (top-interp
+               '{bind [arr = {make-array 12 2}]
+                      arr} 100) "#<array>")
+
+
+(check-equal? (top-interp
+               '{bind [arr = {array 10 20 30 40}]
+                      {seq {aref arr 3}
+                           {aref arr 1}}} 100) "20")
+
+
+(check-exn #rx"AAQZ needs a number for size to make array but got"
+           (lambda ()
+             (top-interp
+               '{bind [arr = {make-array "stop" 2}]
+                      arr} 100) ))
+
+(check-exn #rx"AAQZ can only make array with size bigger than or equal to 1 got:"
+           (lambda () 
+             (top-interp
+               '{bind [arr = {make-array -10 2}]
+                      arr} 100)))
+
+(check-exn #rx"AAQZ cant make an empty array :T"
+           (lambda () 
+             (top-interp
+               '{bind [j = {array}]
+                      j} 100)))
+
+
+
+(check-exn #rx"Number of variables and arguments do not match AAQZ4"
+           (lambda ()
+             (top-interp
+               '{{(div3) => {div3 9 5}}
+                {(x) => {/ x 3}}} 100)))
+ 
+(check-exn #rx"AAQZ4 need an integer"
+           (lambda ()
+             (top-interp
+               '{{(prim) => {prim "42"}}
+                {(x) => {+ x 1}}} 100)))
+
+(check-exn #rx"AAQZ4 needs a bool to do if ops"
+           (lambda ()
+             (top-interp
+               '{if "true" 42 43} 100)))
+
+(check-exn #rx"AAQZ4 need an integer"
+           (lambda ()
+             (top-interp
+               '{{(prim) => {prim "42"}}
+                {(x) => {* x 1}}} 100)))
+
+(check-exn #rx"AAQZ4 need an integer"
+           (lambda ()
+             (top-interp
+               '{{(prim) => {prim "42"}}
+                {(x) => {- x 1}}} 100)))
+
+(check-exn #rx"AAQZ4 need an integer"
+           (lambda ()
+             (top-interp
+               '{{(prim) => {prim "42"}}
+                {(x) => {/ x 1}}} 100)))
+
+(check-exn #rx"AAQZ4 cant divide by zero"
+           (lambda ()
+             (top-interp
+               '{{(prim) => {prim 42}}
+                {(x) => {/ x 0}}} 100))) 
+
+(check-exn #rx"lookup: user-error AAQZ4 found an unbound variable"
+           (lambda ()
+             (top-interp
+               '{{(prim) => {prim 2}}
+                {(x) => {/ x y}}} 100)))
+
+(check-exn #rx"AAQZ4 need an integer"
+           (lambda ()
+             (top-interp
+               '{{(prim) => {prim "2"}}
+                {(x) => {<= x 3}}} 100)))
+
+(check-exn #rx"wrong number of variable for primV AAQZ4"
+           (lambda ()
+             (top-interp
+               '{{(prim) => {prim 42}}
+                {(x) => {+ x 1 4}}} 100)))
+
+(check-equal?
+             (top-interp
+               '{{(same-bool) => {same-bool "false"}}
+                {(x) => {equal? true x}}} 100) "false") 
+
+(check-exn #rx"AAQZ Expected a list of symbols for arguments"
+           (lambda ()
+             (top-interp
+               '{{(same-bool) => {same-bool false}}
+                {(4) => {equal? true x}}} 100)))
+
+
+(check-exn #rx"parse: Invalid identifier"
+           (lambda ()
+             (top-interp
+               'if 100)))
+
+(check-exn #rx"AAQZ4 needs a function that we can apply got"
+           (lambda ()
+             (top-interp
+              '(3 4 5) 100)))
+
+  
+
+
+(check-exn #rx"Number of variables and arguments do not match AAQZ4"
+           (lambda ()
+             (top-interp '((() => 9) 17) 100)))
+
+
+
+
+(check-exn #rx"AAQZ index out of range :P size is"
+           (lambda ()
+             (top-interp
+               '{bind [arr = {array 10 20 30 40}]
+                       {aref arr 10}} 100)))
+
+(check-exn #rx"AAQZ expects an array and integer as input but got"
+           (lambda ()
+             (top-interp
+               '{bind [arr = {array 10 20 30 40}]
+                       {aref arr "hey"}} 100)))
+
+(check-exn #rx"AAQZ expects an array and integer as input but got"
+           (lambda ()
+             (top-interp
+               '{bind [arr = {array 10 20 30 40}]
+                       {aset! arr "hey" 30}} 100)))
+ 
+(check-exn #rx"AAQZ index out of range :P"
+           (lambda ()
+             (top-interp
+               '{bind [arr = {array 10 20 30 40}]
+                       {aset! arr 12 30}} 100)))
+
+(check-exn #rx"AAQZ expects input str int int for substring but got"
+           (lambda ()
+             (top-interp
+               '{substring 20 0 4} 100)))
+
+(check-exn #rx"user error"
+           (lambda ()
+             (top-interp
+               '{error "Testing"} 100)))
+
+(check-exn #rx"AAQZ trying to rebind an unbound variable"
+           (lambda ()
+             (top-interp
+               '{l := 9} 100)))
+
+(check-exn #rx"AAQZ trying to rebind an unbound variable"
+           (lambda ()
+             (top-interp
+               '{bind [j = "hello"]
+                      {k := "heh"}} 100)))
+
+
+(check-equal? (top-interp
+               '{bind [j = "hello"]
+                      {j := "heh"}} 100) "null")
+
+(check-equal? (top-interp
+               '{bind [j = "hello"]
+                      {seq {j := "heh"} j}} 100) "\"heh\"")
+
+
+(check-equal? (top-interp
+               '{bind [arr = {array 10 20 30 40}]
+                       
+                        {aref arr 1}} 100) "20")
+
+(check-equal? (top-interp
+               '{bind [arr = {array 0}]
+                       {seq
+                        {aset! arr 0 50}
+                        {aref arr 0}}} 100) "50")
+
+
+(check-equal? (top-interp
+               '{substring "Hello World" 0 4} 100) "\"Hell\"")
+
+(check-exn #rx"Invalid identifier in AAQZ4"
+           (lambda ()
+             (top-interp
+               '{bind [=> = "This is invalid"]
+                      =>} 100)))
+
+
+(check-exn #rx"Invalid identifier in AAQZ4"
+           (lambda ()
+             (top-interp
+               '{bind [=> = "This is invalid"]
+                      =>} 100)))
+
+(check-exn #rx"AAQZ needs an integer to set array"
+           (lambda ()
+             (top-interp '(bind (f = (make-array 5 false)) (aset! f 2.3 19)) 1000)))
+
+(check-exn #rx"AAQZ memory exceeded :o"
+           (lambda ()
+             (top-interp '(make-array 1001 "abc") 1000)))
+
+
+
+(check-equal? (top-interp
+               '{bind [arr = {array 10 20 30 40}]
+                      {equal? arr arr}} 100) "true")
+
+(check-equal? (top-interp
+               '{bind [arr = {array 10 20 30 40}]
+                      [arr2 = {array 10 20 30 40}]
+                      {equal? arr arr2}} 100) "false")
+
+(check-equal? (top-interp
+               '{bind [arr = {array 10 20 30 40}]
+                      {bind [arr2 = arr]
+                            {equal? arr arr2}}} 100) "true")
+
+
+
+(check-exn #rx"AAQZ cant parse nothin >:"
+           (lambda ()
+             (parse '())))
+
+(check-exn #rx"Not correct binding format in AAQZ"
+           (lambda ()
+             (parse '(bind (x = 3) 3 4))))
+
+
+
+
+;;code
+
+#;(define (while) "hihi")
+
 (define while
   '{bind [while = "bogus"]
                    {seq {while := {(cond body) =>
@@ -373,6 +769,8 @@
                         while}})
 
 #;(top-interp (while) 100)
+
+
 
 
 (define in-order
@@ -400,16 +798,16 @@
            {index := {+ 1 index}}
            (inorder array size))))
 
-(top-interp `{bind [while = ,while]
+#;(top-interp `{bind [while = ,while]
                    {bind  [in-order = ,in-order]
                           {in-order {array 10 20 30} 3}}} 100)
 
-(top-interp '{bind [fact = "bogus"]
+#;(top-interp '{bind [fact = "bogus"]
       {seq {fact := {(x) => {if {equal? x 0}
                                 1
                                 {* x {fact {- x 1}}}}}}
            {fact 12}}} 100)
 
-(parse '(bind (x = 3) 3 4))
+
 
 
