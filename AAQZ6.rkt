@@ -181,6 +181,8 @@
        [(and (stringV? interp-l) (stringV? interp-r))
         (boolV (string=? (stringV-str interp-l) (stringV-str interp-r)))]
        [(and (boolV? interp-l) (boolV? interp-r)) (boolV (eq? (boolV-bool interp-l) (boolV-bool interp-r)))]
+       [(and (arrV? interp-l) (arrV? interp-r))
+        (boolV (= (arrV-start interp-l) (arrV-start interp-r)))]
        [else (boolV #f)])]
     [(list (primV 'seq) (list args ...))
      (last (interp-expr-list args env store))
@@ -703,6 +705,22 @@
 
 
 
+(check-equal? (top-interp
+               '{bind [arr = {array 10 20 30 40}]
+                      {equal? arr arr}} 100) "true")
+
+(check-equal? (top-interp
+               '{bind [arr = {array 10 20 30 40}]
+                      [arr2 = {array 10 20 30 40}]
+                      {equal? arr arr2}} 100) "false")
+
+(check-equal? (top-interp
+               '{bind [arr = {array 10 20 30 40}]
+                      {bind [arr2 = arr]
+                            {equal? arr arr2}}} 100) "true")
+
+
+
 ;;code
 
 
@@ -714,6 +732,8 @@
                                       {seq {body} {while cond body}}
                                       base}}}
            {while c b ba}}})
+
+(while 10 20 30)
 
 (define (inorder)
   "implement later")
