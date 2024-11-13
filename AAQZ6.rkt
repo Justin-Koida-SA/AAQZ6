@@ -215,7 +215,7 @@
            (if (and (arrV? got-arr) (numV? interp-in))
                (if (and (> (arrV-size got-arr) (numV-n interp-in)) (>  (numV-n interp-in) -1))
                    (if (exact-integer? (numV-n interp-in))
-                    (begin (vector-set! store (exact-round (- (+ (arrV-start got-arr) (numV-n interp-in)) 1))
+                    (begin (vector-set! store (exact-round (+ (arrV-start got-arr) (numV-n interp-in)))
                                        (interp value env store))
                           (nullV))
                     (error "AAQZ needs an integer to set array"))
@@ -686,7 +686,7 @@
                '{bind [arr = {array 0}]
                        {seq
                         {aset! arr 0 50}
-                        {aref arr 0}}} 100) "0")
+                        {aref arr 0}}} 100) "50")
 
 
 (check-equal? (top-interp
