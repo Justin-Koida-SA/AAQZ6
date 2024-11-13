@@ -34,28 +34,32 @@
    'if 0
    '=> 0
    '= 0
-   'bind 0))
+   'bind 0
+   '=: 0))
 
 ;;initial store
-(define make-value-vector (inst make-vector Value))
-(define store (make-value-vector 300 (nullV)))
 
-(vector-set! store 0 (numV 16))
-(vector-set! store 1 (boolV #t))
-(vector-set! store 2 (boolV #f))
-(vector-set! store 3 (primV '+))
-(vector-set! store 4 (primV '-))
-(vector-set! store 5 (primV '/))
-(vector-set! store 6 (primV '*))
-(vector-set! store 7 (primV '<=))
-(vector-set! store 8 (primV 'equal?))
-(vector-set! store 9 (primV 'seq))
-(vector-set! store 10 (primV 'make-array))
-(vector-set! store 11 (primV 'array))
-(vector-set! store 12 (primV 'aref))
-(vector-set! store 13 (primV 'aset!))
-(vector-set! store 14 (primV 'substring))
-(vector-set! store 15 (primV 'error))
+(define make-value-vector (inst make-vector Value))
+
+(define (initial-store [size : Natural]) : (Vectorof Value)
+  (define store (make-value-vector (+ 16 size) (nullV)))
+  (vector-set! store (ann 0 Natural) (numV 16))
+  (vector-set! store (ann 1 Natural) (boolV #t))
+  (vector-set! store (ann 2 Natural) (boolV #f))
+  (vector-set! store (ann 3 Natural) (primV '+))
+  (vector-set! store (ann 4 Natural) (primV '-))
+  (vector-set! store (ann 5 Natural) (primV '/))
+  (vector-set! store (ann 6 Natural) (primV '*))
+  (vector-set! store (ann 7 Natural) (primV '<=))
+  (vector-set! store (ann 8 Natural) (primV 'equal?))
+  (vector-set! store (ann 9 Natural) (primV 'seq))
+  (vector-set! store (ann 10 Natural) (primV 'make-array))
+  (vector-set! store (ann 11 Natural) (primV 'array))
+  (vector-set! store (ann 12 Natural) (primV 'aref))
+  (vector-set! store (ann 13 Natural) (primV 'aset!))
+  (vector-set! store (ann 14 Natural) (primV 'substring))
+  (vector-set! store (ann 15 Natural) (primV 'error))
+  store)
 
 ;; top level environment 
 (define top-level-env : Environment
@@ -96,8 +100,8 @@
 
 ;; parses, then interprets a given program in the form of an Sexpr, then calls the serialize
 ;; function to turn it into a string
-(define (top-interp [prog : Sexp]) : String
-  (serialize (interp (parse prog) top-level-env store)))
+(define (top-interp [prog : Sexp] [memsize : Natural]) : String
+  (serialize (interp (parse prog) top-level-env (initial-store memsize))))
 
 ;; Takes in an ExprC and an Environment and returns a Value representing the
 ;; interpreted program.
@@ -205,10 +209,12 @@
            (define got-arr (interp arr env store))
            (define interp-in (interp index env store))
            (if (and (arrV? got-arr) (numV? interp-in))
-               (if (or (> (arrV-size got-arr) (numV-n interp-in)) (> 0 (numV-n interp-in)))
-                   (begin (vector-set! store (exact-round (- (+ (arrV-start got-arr) (numV-n interp-in)) 1))
+               (if (and (> (arrV-size got-arr) (numV-n interp-in)) (>  (numV-n interp-in) -1))
+                   (if (exact-integer? (numV-n interp-in))
+                    (begin (vector-set! store (exact-round (- (+ (arrV-start got-arr) (numV-n interp-in)) 1))
                                        (interp value env store))
                           (nullV))
+                    (error "AAQZ needs an integer to set array"))
                    (error "AAQZ index out of range :P"))
                (error "AAQZ expects an array and integer as input but got ~a and ~a" arr index))]
     [(list (primV 'substring) (list str start end))
@@ -262,9 +268,12 @@
 ;;takes in a value and a store and return the location that the value has been stored to
 (define (update-store [store-val : Value] [store : (Vectorof Value)]) : Integer
   (define available (exact-round (numV-n (cast (vector-ref store 0) numV))))
-  (vector-set! store available store-val)
-  (vector-set! store 0 (numV (+ available 1)))
-  available)
+  (if (>= available (vector-length store))
+      (error 'update-store "AAQZ memory exceeded :o")
+      (begin
+        (vector-set! store available store-val)
+        (vector-set! store (ann 0 Natural) (numV (+ available 1)))
+        available)))
 
 ;; takes in a list of ExprC representing args, and an Environment. Interprets everything
 ;; in the list of ExprC into a list of Values 
@@ -377,97 +386,97 @@
                             (list (numC 5) (numC 7)))) 
 
 (check-equal? (top-interp
-               '{if false 3 23}) "23")
+               '{if false 3 23} 100) "23")
 
 (check-equal? (top-interp
                '{{(add1) => {add1 42}}
-                {(x) => {+ x 1}}}) "43")
+                {(x) => {+ x 1}}} 100) "43")
 
 (check-equal? (top-interp
                '{{(min1) => {min1 42}}
-                {(x) => {- x 1}}}) "41")
+                {(x) => {- x 1}}} 100) "41")
 
 (check-equal? (top-interp
                '{{(mult2) => {mult2 42}}
-                {(x) => {* x 2}}}) "84")
+                {(x) => {* x 2}}} 100) "84")
 
 (check-equal? (top-interp
                '{{(div3) => {div3 9}}
-                {(x) => {/ x 3}}}) "3")
+                {(x) => {/ x 3}}} 100) "3")
 
 (check-equal? (top-interp
                '{{(bigger-than-2) => {bigger-than-2 4}}
-                {(x) => {<= 2 x}}}) "true")
+                {(x) => {<= 2 x}}} 100) "true")
 
 (check-equal? (top-interp
                '{{(bigger-than-2) => {bigger-than-2 4}}
-                {(x) => {<= 2 x}}}) "true")
+                {(x) => {<= 2 x}}} 100) "true")
 
 (check-equal? (top-interp
                '{{(same-as-2) => {same-as-2 2}}
-                {(x) => {equal? 2 x}}}) "true")
+                {(x) => {equal? 2 x}}} 100) "true")
 
 (check-equal? (top-interp
                '{{(same-as-2) => {same-as-2 3}}
-                {(x) => {equal? 2 x}}}) "false")
+                {(x) => {equal? 2 x}}} 100) "false")
 
 (check-equal? (top-interp
                '{{(same-as-str-2) => {same-as-str-2 "2"}}
-                {(x) => {equal? "2" x}}}) "true")
+                {(x) => {equal? "2" x}}} 100) "true")
 
 (check-equal? (top-interp
                '{{(same-as-str-2) => {same-as-str-2 "3"}}
-                {(x) => {equal? "2" x}}}) "false")
+                {(x) => {equal? "2" x}}} 100) "false")
 
 (check-equal? (top-interp
                '{{(same-bool) => {same-bool false}}
-                {(x) => {equal? false x}}}) "true")
+                {(x) => {equal? false x}}} 100) "true")
 
 (check-equal? (top-interp
                '{{(same-bool) => {same-bool false}}
-                {(x) => {equal? true x}}}) "false")
+                {(x) => {equal? true x}}} 100) "false")
 
 
 (check-equal? (top-interp
                '{{(noArg) => {noArg}}
-                {() => 3}}) "3")
+                {() => 3}} 100) "3")
 
 (check-equal? (top-interp
-               '43) "43")
+               '43 100) "43")
 
 (check-equal? (top-interp
-               '"dogs") "\"dogs\"")
+               '"dogs" 100) "\"dogs\"")
 
 (check-equal? (top-interp
-               'true) "true")
+               'true 100) "true")
 (check-equal? (top-interp
-               'false) "false")
-
-(check-equal? (top-interp
-               '{(x) => {* x 2}}) "#<procedure>")
+               'false 100) "false")
 
 (check-equal? (top-interp
-               '*) "#<primop>")
+               '{(x) => {* x 2}} 100) "#<procedure>")
+
+(check-equal? (top-interp
+               '* 100) "#<primop>")
 
 
-(check-equal? (top-interp '(+ 2 3)) "5")
-(check-equal? (top-interp '{if true 34 39}) "34")
-(check-equal? (top-interp '{{(x y) => {+ x y}} 4 3}) "7")
+(check-equal? (top-interp '(+ 2 3) 100) "5")
+(check-equal? (top-interp '{if true 34 39} 100) "34")
+(check-equal? (top-interp '{{(x y) => {+ x y}} 4 3} 100) "7")
 
 (check-exn #rx"AAQZ4 found a syntax error repeated argument name\n"
            (lambda ()
              (top-interp
                '{{(add1) => {add1 42}}
-                {(x x) => {+ x 1}}})))
+                {(x x) => {+ x 1}}} 100)))
 
 (check-equal?
  (top-interp
   '{bind [x = 5]
          [y = 7]
-         {+ x y}}) "12")
+         {+ x y}} 100) "12")
 (check-equal?
  (top-interp
-  '{bind  12}) "12")
+  '{bind  12} 100) "12")
 
 (top-interp '{ bind 
       [one = { (f) => ((v) => (f v)) }]
@@ -480,40 +489,40 @@
       {bind
        [three = {(add one) two}]
        [why = 3]
-       {(three ((x) => (* x 2))) why}}})
+       {(three ((x) => (* x 2))) why}}} 100)
 
 
 (check-equal? (top-interp
                '{bind [j = {array 3 10}]
-                      j}) "#<array>")
+                      j} 100) "#<array>")
 
 (check-equal? (top-interp
                '{bind [arr = {make-array 12 2}]
-                      arr}) "#<array>")
+                      arr} 100) "#<array>")
 
 (check-equal? (top-interp
                '{bind [arr = {array 10 20 30 40}]
                       {seq {aref arr 3}
-                           {aref arr 2}}}) "20")
+                           {aref arr 2}}} 100) "20")
 
 
 (check-exn #rx"AAQZ needs a number for size to make array but got"
            (lambda ()
              (top-interp
                '{bind [arr = {make-array "stop" 2}]
-                      arr})))
+                      arr} 100) ))
 
 (check-exn #rx"AAQZ can only make array with size bigger than or equal to 1 got:"
            (lambda () 
              (top-interp
                '{bind [arr = {make-array -10 2}]
-                      arr})))
+                      arr} 100)))
 
 (check-exn #rx"AAQZ cant make an empty array :T"
            (lambda () 
              (top-interp
                '{bind [j = {array}]
-                      j})))
+                      j} 100)))
 
 
 
@@ -521,89 +530,89 @@
            (lambda ()
              (top-interp
                '{{(div3) => {div3 9 5}}
-                {(x) => {/ x 3}}})))
+                {(x) => {/ x 3}}} 100)))
  
 (check-exn #rx"AAQZ4 need an integer"
            (lambda ()
              (top-interp
                '{{(prim) => {prim "42"}}
-                {(x) => {+ x 1}}})))
+                {(x) => {+ x 1}}} 100)))
 
 (check-exn #rx"AAQZ4 needs a bool to do if ops"
            (lambda ()
              (top-interp
-               '{if "true" 42 43})))
+               '{if "true" 42 43} 100)))
 
 (check-exn #rx"AAQZ4 need an integer"
            (lambda ()
              (top-interp
                '{{(prim) => {prim "42"}}
-                {(x) => {* x 1}}})))
+                {(x) => {* x 1}}} 100)))
 
 (check-exn #rx"AAQZ4 need an integer"
            (lambda ()
              (top-interp
                '{{(prim) => {prim "42"}}
-                {(x) => {- x 1}}})))
+                {(x) => {- x 1}}} 100)))
 
 (check-exn #rx"AAQZ4 need an integer"
            (lambda ()
              (top-interp
                '{{(prim) => {prim "42"}}
-                {(x) => {/ x 1}}})))
+                {(x) => {/ x 1}}} 100)))
 
 (check-exn #rx"AAQZ4 cant divide by zero"
            (lambda ()
              (top-interp
                '{{(prim) => {prim 42}}
-                {(x) => {/ x 0}}}))) 
+                {(x) => {/ x 0}}} 100))) 
 
 (check-exn #rx"lookup: user-error AAQZ4 found an unbound variable"
            (lambda ()
              (top-interp
                '{{(prim) => {prim 2}}
-                {(x) => {/ x y}}})))
+                {(x) => {/ x y}}} 100)))
 
 (check-exn #rx"AAQZ4 need an integer"
            (lambda ()
              (top-interp
                '{{(prim) => {prim "2"}}
-                {(x) => {<= x 3}}})))
+                {(x) => {<= x 3}}} 100)))
 
 (check-exn #rx"wrong number of variable for primV AAQZ4"
            (lambda ()
              (top-interp
                '{{(prim) => {prim 42}}
-                {(x) => {+ x 1 4}}})))
+                {(x) => {+ x 1 4}}} 100)))
 
 (check-equal?
              (top-interp
                '{{(same-bool) => {same-bool "false"}}
-                {(x) => {equal? true x}}}) "false") 
+                {(x) => {equal? true x}}} 100) "false") 
 
 (check-exn #rx"AAQZ Expected a list of symbols for arguments"
            (lambda ()
              (top-interp
                '{{(same-bool) => {same-bool false}}
-                {(4) => {equal? true x}}})))
+                {(4) => {equal? true x}}} 100)))
 
 
 (check-exn #rx"parse: Invalid identifier"
            (lambda ()
              (top-interp
-               'if)))
+               'if 100)))
 
 (check-exn #rx"AAQZ4 needs a function that we can apply got"
            (lambda ()
              (top-interp
-              '(3 4 5))))
+              '(3 4 5) 100)))
 
  
 
 
 (check-exn #rx"Number of variables and arguments do not match AAQZ4"
            (lambda ()
-             (top-interp '((() => 9) 17))))
+             (top-interp '((() => 9) 17) 100)))
 
 
 
@@ -612,89 +621,108 @@
            (lambda ()
              (top-interp
                '{bind [arr = {array 10 20 30 40}]
-                       {aref arr 10}})))
+                       {aref arr 10}} 100)))
 
 (check-exn #rx"AAQZ expects an array and integer as input but got"
            (lambda ()
              (top-interp
                '{bind [arr = {array 10 20 30 40}]
-                       {aref arr "hey"}})))
+                       {aref arr "hey"}} 100)))
 
 (check-exn #rx"AAQZ expects an array and integer as input but got"
            (lambda ()
              (top-interp
                '{bind [arr = {array 10 20 30 40}]
-                       {aset! arr "hey" 30}})))
+                       {aset! arr "hey" 30}} 100)))
 
 (check-exn #rx"AAQZ index out of range :P"
            (lambda ()
              (top-interp
                '{bind [arr = {array 10 20 30 40}]
-                       {aset! arr 12 30}})))
+                       {aset! arr 12 30}} 100)))
 
 (check-exn #rx"AAQZ expects input str int int for substring but got"
            (lambda ()
              (top-interp
-               '{substring 20 0 4})))
+               '{substring 20 0 4} 100)))
 
 (check-exn #rx"user error"
            (lambda ()
              (top-interp
-               '{error "Testing"})))
+               '{error "Testing"} 100)))
 
 (check-exn #rx"AAQZ trying to rebind an unbound variable"
            (lambda ()
              (top-interp
-               '{l := 9})))
+               '{l := 9} 100)))
 
 (check-exn #rx"AAQZ trying to rebind an unbound variable"
            (lambda ()
              (top-interp
                '{bind [j = "hello"]
-                      {k := "heh"}})))
+                      {k := "heh"}} 100)))
 
 
 (check-equal? (top-interp
                '{bind [j = "hello"]
-                      {j := "heh"}}) "null")
+                      {j := "heh"}} 100) "null")
 
 (check-equal? (top-interp
                '{bind [j = "hello"]
-                      {seq {j := "heh"} j}}) "\"heh\"")
+                      {seq {j := "heh"} j}} 100) "\"heh\"")
 
 
 (check-equal? (top-interp
                '{bind [arr = {array 10 20 30 40}]
-                       {aset! arr 2 50}}) "null")
+                       {aset! arr 2 50}} 100) "null")
 
 
 (check-equal? (top-interp
-               '{substring "Hello World" 0 4}) "\"Hell\"")
+               '{substring "Hello World" 0 4} 100) "\"Hell\"")
 
-#;(check-exn #rx"Invalid identifier in AAQZ4"
+(check-exn #rx"Invalid identifier in AAQZ4"
            (lambda ()
              (top-interp
-               '{bind [+ = "This is invalid"]
-                      +})))
-
-#;(check-equal? (top-interp
-               '{bind [arr = {array 10 20 30 40}]
-                       {aref arr 10}}) "20")
-
-#;(check-equal? (top-interp
-               '{bind [j = "hello"]
-                      {seq {j := "heh"}
-                           j}}) "heh")
+               '{bind [=> = "This is invalid"]
+                      =>} 100)))
 
 
+(check-exn #rx"Invalid identifier in AAQZ4"
+           (lambda ()
+             (top-interp
+               '{bind [=> = "This is invalid"]
+                      =>} 100)))
 
+(check-exn #rx"AAQZ needs an integer to set array"
+           (lambda ()
+             (top-interp '(bind (f = (make-array 5 false)) (aset! f 2.3 19)) 1000)))
 
-
-
-
-
- 
+(check-exn #rx"AAQZ memory exceeded :o"
+           (lambda ()
+             (top-interp '(make-array 1001 "abc") 1000)))
 
 
 
+;;code
+
+
+
+(define (while c b ba)
+  '{bind [while = "bogus"]
+      {seq {while := {(cond body base) =>
+                                  {if {cond}
+                                      {seq {body} {while cond body}}
+                                      base}}}
+           {while c b ba}}})
+
+(define (inorder)
+  "implement later")
+
+(top-interp (inorder) 100)
+
+
+
+
+
+(parse '(locals ""))
 
