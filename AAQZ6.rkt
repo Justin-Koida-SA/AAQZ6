@@ -332,7 +332,8 @@
          (let* ([parsed-rest (parse-binds r)]
                 [ids (cons id (bindpair-funName parsed-rest))]
                 [exprs (cons (parse expr) (bindpair-fun parsed-rest))])
-           (bindpair ids exprs)))]))
+           (bindpair ids exprs)))]
+    [other (error "Not correct binding format in AAQZ")]))
 
 ;;takes in a list of symbols representing arguments and checks if there are any duplicate names for
 ;;arguments in the given list using check-duplicate-arg-helper. Returns the list of arguments.
@@ -737,6 +738,11 @@
            (lambda ()
              (parse '())))
 
+(check-exn #rx"Not correct binding format in AAQZ"
+           (lambda ()
+             (parse '(bind (x = 3) 3 4))))
+
+
 
 
 ;;code
@@ -753,7 +759,7 @@
 
 #;(top-interp (while) 100)
 
-(define in-order
+#;(define in-order
   '{bind [inorder ="bogus"]
                      [index = 0]
                      [increasing = true]
@@ -778,14 +784,14 @@
            {index := {+ 1 index}}
            (inorder array size))))
 
-(top-interp `{bind [while = ,while]
+#;(top-interp `{bind [while = ,while]
                    {bind  [in-order = ,in-order]
                           {in-order {array 10 20 30} 3}}} 100)
  
 
 
 
-(top-interp '{bind [fact = "bogus"]
+#;(top-interp '{bind [fact = "bogus"]
       {seq {fact := {(x) => {if {equal? x 0}
                                 1
                                 {* x {fact {- x 1}}}}}}
@@ -793,6 +799,5 @@
 
 (parse '(locals ""))
 
-(parse '(bind (x = 3) 3 4))
 
 
