@@ -42,8 +42,8 @@
 (define make-value-vector (inst make-vector Value))
 
 (define (initial-store [size : Natural]) : (Vectorof Value)
-  (define store (make-value-vector (+ 16 size) (nullV)))
-  (vector-set! store (ann 0 Natural) (numV 16))
+  (define store (make-value-vector (+ 17 size) (nullV)))
+  (vector-set! store (ann 0 Natural) (numV 17))
   (vector-set! store (ann 1 Natural) (boolV #t))
   (vector-set! store (ann 2 Natural) (boolV #f))
   (vector-set! store (ann 3 Natural) (primV '+))
@@ -59,6 +59,7 @@
   (vector-set! store (ann 13 Natural) (primV 'aset!))
   (vector-set! store (ann 14 Natural) (primV 'substring))
   (vector-set! store (ann 15 Natural) (primV 'error))
+  (vector-set! store (ann 16 Natural) (nullV))
   store)
 
 ;; top level environment 
@@ -79,6 +80,7 @@
    (binding 'aset! 13)
    (binding 'substring 14)
    (binding 'error 15)
+   (binding 'null 16)
    ))
 
 
@@ -198,7 +200,7 @@
     [(list (primV 'array) (list args ...))
      (if (empty? args)
          (error "AAQZ cant make an empty array :T")
-         (arrV (array-helper (map (lambda (arg) (interp (cast arg ExprC) env store)) args) store) (length args)))]
+         (arrV (array-helper (interp-expr-list args env store) store) (length args)))]
     [(list (primV 'aref) (list arr index))
      (define got-arr (interp arr env store))
      (define interp-in (interp index env store))
@@ -609,7 +611,7 @@
              (top-interp
               '(3 4 5) 100)))
 
- 
+  
 
 
 (check-exn #rx"Number of variables and arguments do not match AAQZ4"
@@ -723,26 +725,52 @@
 
 ;;code
 
+#;(define (while) "hihi")
+
+(define while
+  '{(c b ba) =>
+             {bind [while = "bogus"]
+                   {seq {while := {(cond body base) =>
+                                                    {if {cond}
+                                                        {seq {body} {while cond body}}
+                                                        base}}}
+                        {while c b ba}}}})
+
+#;(top-interp (while) 100)
+
+(define inorder
+  '{(arr size) =>
+               {bind [inorder ="bogus"]
+                     [index = 0]
+                     {seq {inorder := {(array size) =>
+                                                    {{while}
+                                                     (<= size (+ index 1))
+                                                     (if (<= (aref array (+ 1 index)) (aref array index))
+                                                             false
+                                                             (seq
+                                                              {index := {+ 1 index}}
+                                                              (inorder array size)))
+                                                     true
+                                                     }}}
+              {inorder arr siz}}}})
+
+#;(if (<= size (+ index 1))
+      true
+      (if (<= (aref array (+ 1 index)) (aref array index))
+          false
+          (seq
+           {index := {+ 1 index}}
+           (inorder array size))))
+#;(top-interp {inorder '{1 2 3 4} 4} 100)
+ 
 
 
-(define (while c b ba)
-  '{bind [while = "bogus"]
-      {seq {while := {(cond body base) =>
-                                  {if {cond}
-                                      {seq {body} {while cond body}}
-                                      base}}}
-           {while c b ba}}})
 
-(while 10 20 30)
-
-(define (inorder)
-  "implement later")
-
-(top-interp (inorder) 100)
-
-
-
-
+(top-interp '{bind [fact = "bogus"]
+      {seq {fact := {(x) => {if {equal? x 0}
+                                1
+                                {* x {fact {- x 1}}}}}}
+           {fact 12}}} 100)
 
 (parse '(locals ""))
 
