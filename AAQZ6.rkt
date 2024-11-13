@@ -35,7 +35,7 @@
    '=> 0
    '= 0
    'bind 0
-   '=: 0))
+   ':= 0))
 
 ;;initial store
 
@@ -317,7 +317,9 @@
     [(? symbol? s)
      (if (hash-has-key? invalid-table s)
          (error 'parse "Invalid identifier: ~a in AAQZ4" prog)
-         (idC s))]))
+         (idC s))]
+    ['() (error "AAQZ cant parse nothin >:")]
+    ))
 
 ;; takes clauses needed to be bound and creates a bindpair containing the list of symbols
 ;; and their corresponding parsed expressions
@@ -731,24 +733,28 @@
 
 
 
+(check-exn #rx"AAQZ cant parse nothin >:"
+           (lambda ()
+             (parse '())))
+
+
+
 ;;code
 
 #;(define (while) "hihi")
 
 (define while
-  '{(c b ba) =>
-             {bind [while = "bogus"]
+  '{bind [while = "bogus"]
                    {seq {while := {(cond body) =>
                                                     {if {cond}
                                                         {seq {body} {while cond body}}
                                                         nullV}}}
-                        {while c b ba}}}})
+                        while}})
 
 #;(top-interp (while) 100)
 
-(define inorder
-  '{(arr size) =>
-               {bind [inorder ="bogus"]
+(define in-order
+  '{bind [inorder ="bogus"]
                      [index = 0]
                      [increasing = true]
                      {seq {inorder := {(array size) =>
@@ -762,7 +768,7 @@
                                                            (inorder array size)))
                                                       }
                                                      increasing}}}
-              {inorder arr siz}}}})
+                          {inorder}}})
 
 #;(if (<= size (+ index 1))
       true
@@ -771,7 +777,10 @@
           (seq
            {index := {+ 1 index}}
            (inorder array size))))
-#;(top-interp {inorder '{1 2 3 4} 4} 100)
+
+(top-interp `{bind [while = ,while]
+                   {bind  [in-order = ,in-order]
+                          {in-order {array 10 20 30} 3}}} 100)
  
 
 
@@ -783,4 +792,7 @@
            {fact 12}}} 100)
 
 (parse '(locals ""))
+
+(parse '(bind (x = 3) 3 4))
+
 
