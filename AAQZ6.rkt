@@ -37,8 +37,8 @@
    'bind 0
    ':= 0))
 
-;;initial store
-
+;; defining the initial store
+;; the store intially contains the size of the store as its first element, then the primitives, nullV and boolV
 (define make-value-vector (inst make-vector Value))
 
 (define (initial-store [size : Natural]) : (Vectorof Value)
@@ -105,7 +105,7 @@
 (define (top-interp [prog : Sexp] [memsize : Natural]) : String
   (serialize (interp (parse prog) top-level-env (initial-store memsize))))
 
-;; Takes in an ExprC and an Environment and returns a Value representing the
+;; Takes in an ExprC, an Environment, and the store and returns a Value representing the
 ;; interpreted program.
 (define (interp [expr : ExprC] [env : Environment] [store : (Vectorof Value)]) : Value
   (match expr
@@ -122,17 +122,14 @@
        [other (error "AAQZ4 needs a function that we can apply got: ~a" other)])]
     [(ifC test then else)
      (define interped-test (interp test env store))
-     (printf "Evaluated test result (before bool check): ~a\n" interped-test)
      (if (if (boolV? interped-test) 
              (boolV-bool interped-test)
              (error "AAQZ4 needs a bool to do if ops"))
-         (begin
-           (printf "Evaluating then branch: ~a\n" then)
-           (interp then env store))
-         (begin
-           (printf "Evaluating else branch: ~a\n" else)
-           (interp else env store)))]))
+           (interp then env store)
+           (interp else env store))]))
 
+;; takes in a symbol, an ExprC, the environment, and the store and rebinds the symbol
+;; to the interpreted ExprC
 (define (rebind [s : Symbol] [new : ExprC] [env : Environment] [store : (Vectorof Value)]) : nullV
   (match env
     ['() (error "AAQZ trying to rebind an unbound variable ~a" s)]
@@ -143,7 +140,7 @@
            (nullV))
          (rebind s new r store))]))
 
-;; takes in a primV operation, arguments in the form of Listof ExprC, and an environment.
+;; takes in a primV operation, arguments in the form of Listof ExprC, an environment, and the store.
 ;; Matches the operation to its corresponding functionality and returns the evaluated
 ;; operation.
 (define (do-math [op : primV] [arg : (Listof ExprC)] [env : Environment] [store : (Vectorof Value)]) : Value
@@ -177,12 +174,8 @@
     [(list (primV '<=) (list l r))
      (define interp-l (interp l env store))
      (define interp-r (interp r env store))
-     (printf "Evaluated l result: ~a\n" interp-l)
-     (printf "Evaluated r result: ~a\n" interp-r)
      (if (and (numV? interp-l) (numV? interp-r))
-         (begin
-           (printf "Boolean result of (<= l r): ~a\n" (<= (numV-n interp-l) (numV-n interp-r)))
-           (boolV (<= (numV-n interp-l) (numV-n interp-r))))
+         (boolV (<= (numV-n interp-l) (numV-n interp-r)))
          (error  "AAQZ4 need an integer with ~a operator" '<=))]
     [(list (primV 'equal?) (list l r))
      (define interp-l (interp l env store))
@@ -219,17 +212,17 @@
              (error "AAQZ index out of range :P size is ~a index ~a" (arrV-size got-arr) (numV-n interp-in)))
          (error "AAQZ expects an array and integer as input but got ~a and ~a" arr index))]
     [(list (primV 'aset!) (list arr index value))
-           (define got-arr (interp arr env store))
-           (define interp-in (interp index env store))
-           (if (and (arrV? got-arr) (numV? interp-in))
-               (if (and (> (arrV-size got-arr) (numV-n interp-in)) (>  (numV-n interp-in) -1))
-                   (if (exact-integer? (numV-n interp-in))
-                    (begin (vector-set! store (exact-round (+ (arrV-start got-arr) (numV-n interp-in)))
-                                       (interp value env store))
-                          (nullV))
-                    (error "AAQZ needs an integer to set array"))
-                   (error "AAQZ index out of range :P"))
-               (error "AAQZ expects an array and integer as input but got ~a and ~a" arr index))]
+     (define got-arr (interp arr env store))
+     (define interp-in (interp index env store))
+     (if (and (arrV? got-arr) (numV? interp-in))
+         (if (and (> (arrV-size got-arr) (numV-n interp-in)) (>  (numV-n interp-in) -1))
+             (if (exact-integer? (numV-n interp-in))
+                 (begin (vector-set! store (exact-round (+ (arrV-start got-arr) (numV-n interp-in)))
+                                     (interp value env store))
+                        (nullV))
+                 (error "AAQZ needs an integer to set array"))
+             (error "AAQZ index out of range :P"))
+         (error "AAQZ expects an array and integer as input but got ~a and ~a" arr index))]
     [(list (primV 'substring) (list str start end))
      (define s (interp str env store))
      (define in-start (interp start env store))
@@ -242,6 +235,8 @@
      (error "user error " (serialize (interp v env store)))]
     [other (error "wrong number of variable for primV AAQZ4: ~a" other)]))
 
+;; Takes in a size of an array, a fill Value and the store and recursively adds the fill Value to the store
+;; until the size is 0. Essentially creating an array of length size with each element being the fill Value
 (define (make-array-helper [size : Integer] [fill : Value] [store : (Vectorof Value)]) : Integer
   (if (equal? size 0)
       0
@@ -249,12 +244,16 @@
         (make-array-helper (- size 1) fill store)
         (- (update-store fill store) (- size 1)))))
 
+;; Takes in a list of ExprC, an environment, and the store and returns a list of the interpreted
+;; ExprC as a list of Values
 (define (interp-expr-list [exprs : (Listof ExprC)] [env : Environment] [store : (Vectorof Value)]) : (Listof Value)
   (match exprs
     ['() '()]
     [(cons first rest)
      (cons (interp first env store) (interp-expr-list rest env store))]))
 
+;; Takes in a list of Values representing elements in an array and adds them to the store
+;; returns the starting position of the array in the store
 (define (array-helper [content : (Listof Value)] [store : (Vectorof Value)]) : Integer
   (match content
     ['() 0]
@@ -264,16 +263,15 @@
        (array-helper r store)
        ret)]))
 
-;; takes in a closure and a list of values and extends the closure's environment
+;; takes in a closure, a list of values, and the store and extends the closure's environment
 ;;by binding closure's syms to the list of values and evaluates the body with the new environment
 (define (app-intrp-helper [closer : closV] [args : (Listof Value)] [store : (Vectorof Value)]) : Value
   (match closer
     [(closV syms body env) (interp body (extend-env env (bind syms args store)) store)]))
 
-;; takes in a list of symbols and a list of values and creates a binding for each
+;; takes in a list of symbols, a list of values, and the store and creates a binding for each
 ;; corresponding symbol value pair. The bindings are then put into an Environment
 (define (bind [l1 : (Listof Symbol)] [l2 : (Listof Value)] [store : (Vectorof Value)]) : Environment
-  (printf "bind called with l1: ~a, l2: ~a\n" l1 l2)
   (match (list l1 l2)
     [(list '() '()) '()]
     [(list (cons f1 r1) (cons f2 r2)) (cons (binding f1 (update-store f2 store)) (bind r1 r2 store))]
@@ -289,7 +287,7 @@
         (vector-set! store (ann 0 Natural) (numV (+ available 1)))
         available)))
 
-;; takes in a list of ExprC representing args, and an Environment. Interprets everything
+;; takes in a list of ExprC representing args, an Environment, and the store. Interprets everything
 ;; in the list of ExprC into a list of Values 
 (define (interp-args [args : (Listof ExprC)] [env : Environment] [store : (Vectorof Value)]) : (Listof Value)
   (match args
@@ -307,7 +305,7 @@
     [(nullV) "null"]
     [(arrV _ _) "#<array>"]))
 
-;;takes in an S-expression and parses it into our AAQZ4 language in the form of an ExprC.
+;;takes in an S-expression and parses it into our AAQZ language in the form of an ExprC.
 ;;Checks for invalid syntaxes and invalid identifiers.
 (define (parse [prog : Sexp]) : ExprC 
   (match prog
@@ -361,12 +359,9 @@
      (if (equal? new arg)
          (error "AAQZ4 found a syntax error repeated argument name\n")
          (check-duplicate-arg-helper new rest))]))
- 
+
+
 ;;test
-
-
-
-
 (check-equal? (parse
                '{bind [x = 5]
                       [y = 7]
@@ -757,8 +752,9 @@
 
 ;;code
 
-#;(define (while) "hihi")
-
+;; While code in AAQZ
+;; Takes in a condition and a body and if the condition is true, it returns the body
+;; else it recursively calls itself with the condition and body
 (define while
   '{bind [while = "bogus"]
                    {seq {while := {(cond body) =>
@@ -767,11 +763,8 @@
                                                         null}}}
                         while}})
 
-#;(top-interp (while) 100)
-
-
-
-
+;; In-order code in AAQZ
+;; Takes in an array of numbers and its size and returns true if the array is strictly in increasing order
 (define in-order
   '{bind [inorder = "bogus"]         
          {seq {inorder := {(array size) =>
@@ -789,14 +782,6 @@
                                                increasing}}}}
               inorder}})
 
-#;(if (<= size (+ index 1)) 
-      true
-      (if (<= (aref array (+ 1 index)) (aref array index))
-          false
-          (seq
-           {index := {+ 1 index}}
-           (inorder array size))))
-
 (check-equal?
  (top-interp `{bind [while = ,while]
                     {bind  [in-order = ,in-order]
@@ -804,11 +789,6 @@
                               {if {in-order {array 3 8 6} 3} 0 1}}}} 100)
  "2")
 
-#;(top-interp '{bind [fact = "bogus"]
-      {seq {fact := {(x) => {if {equal? x 0}
-                                1
-                                {* x {fact {- x 1}}}}}}
-           {fact 12}}} 100)
 
 
 
