@@ -100,8 +100,8 @@
     [(cons f r) (cons f (extend-env env r))]))
 
 
-;; parses, then interprets a given program in the form of an Sexpr, then calls the serialize
-;; function to turn it into a string
+;; Initializes the store of a numeric input size and parses, then interprets a given program in the form of an Sexpr
+;; ,then calls the serialize function to turn it into a string
 (define (top-interp [prog : Sexp] [memsize : Natural]) : String
   (serialize (interp (parse prog) top-level-env (initial-store memsize))))
 
@@ -476,12 +476,6 @@
 (check-equal? (top-interp '{if true 34 39} 100) "34")
 (check-equal? (top-interp '{{(x y) => {+ x y}} 4 3} 100) "7")
 
-(check-exn #rx"AAQZ4 found a syntax error repeated argument name\n"
-           (lambda ()
-             (top-interp
-               '{{(add1) => {add1 42}}
-                {(x x) => {+ x 1}}} 100)))
-
 (check-equal?
  (top-interp
   '{bind [x = 5]
@@ -491,7 +485,7 @@
  (top-interp
   '{bind  12} 100) "12")
 
-(top-interp '{ bind 
+(check-equal? (top-interp '{ bind 
       [one = { (f) => ((v) => (f v)) }]
       [two = { (f) => ((v) => (f (f v))) }]
       [add = { (m) =>
@@ -502,7 +496,12 @@
       {bind
        [three = {(add one) two}]
        [why = 3]
-       {(three ((x) => (* x 2))) why}}} 100)
+       {(three ((x) => (* x 2))) why}}} 100) "24")
+
+(check-equal?
+             (top-interp
+               '{{(same-bool) => {same-bool "false"}}
+                {(x) => {equal? true x}}} 100) "false") 
 
 
 (check-equal? (top-interp
@@ -519,6 +518,49 @@
                       {seq {aref arr 3}
                            {aref arr 1}}} 100) "20")
 
+(check-equal? (top-interp
+               '{bind [arr = {array 10 20 30 40}]
+                      {equal? arr arr}} 100) "true")
+
+(check-equal? (top-interp
+               '{bind [arr = {array 10 20 30 40}]
+                      [arr2 = {array 10 20 30 40}]
+                      {equal? arr arr2}} 100) "false")
+
+(check-equal? (top-interp
+               '{bind [arr = {array 10 20 30 40}]
+                      {bind [arr2 = arr]
+                            {equal? arr arr2}}} 100) "true")
+
+(check-equal? (top-interp
+               '{bind [j = "hello"]
+                      {j := "heh"}} 100) "null")
+
+(check-equal? (top-interp
+               '{bind [j = "hello"]
+                      {seq {j := "heh"} j}} 100) "\"heh\"")
+
+(check-equal? (top-interp
+               '{bind [arr = {array 10 20 30 40}]
+                       
+                        {aref arr 1}} 100) "20")
+
+(check-equal? (top-interp
+               '{bind [arr = {array 0}]
+                       {seq
+                        {aset! arr 0 50}
+                        {aref arr 0}}} 100) "50")
+
+(check-equal? (top-interp
+               '{substring "Hello World" 0 4} 100) "\"Hell\"")
+
+
+;; Exception test cases. Making sure our errors work
+(check-exn #rx"AAQZ4 found a syntax error repeated argument name\n"
+           (lambda ()
+             (top-interp
+               '{{(add1) => {add1 42}}
+                {(x x) => {+ x 1}}} 100)))
 
 (check-exn #rx"AAQZ needs a number for size to make array but got"
            (lambda ()
@@ -537,8 +579,6 @@
              (top-interp
                '{bind [j = {array}]
                       j} 100)))
-
-
 
 (check-exn #rx"Number of variables and arguments do not match AAQZ4"
            (lambda ()
@@ -599,11 +639,6 @@
                '{{(prim) => {prim 42}}
                 {(x) => {+ x 1 4}}} 100)))
 
-(check-equal?
-             (top-interp
-               '{{(same-bool) => {same-bool "false"}}
-                {(x) => {equal? true x}}} 100) "false") 
-
 (check-exn #rx"AAQZ Expected a list of symbols for arguments"
            (lambda ()
              (top-interp
@@ -621,15 +656,9 @@
              (top-interp
               '(3 4 5) 100)))
 
-  
-
-
 (check-exn #rx"Number of variables and arguments do not match AAQZ4"
            (lambda ()
              (top-interp '((() => 9) 17) 100)))
-
-
-
 
 (check-exn #rx"AAQZ index out of range :P size is"
            (lambda ()
@@ -676,37 +705,11 @@
                '{bind [j = "hello"]
                       {k := "heh"}} 100)))
 
-
-(check-equal? (top-interp
-               '{bind [j = "hello"]
-                      {j := "heh"}} 100) "null")
-
-(check-equal? (top-interp
-               '{bind [j = "hello"]
-                      {seq {j := "heh"} j}} 100) "\"heh\"")
-
-
-(check-equal? (top-interp
-               '{bind [arr = {array 10 20 30 40}]
-                       
-                        {aref arr 1}} 100) "20")
-
-(check-equal? (top-interp
-               '{bind [arr = {array 0}]
-                       {seq
-                        {aset! arr 0 50}
-                        {aref arr 0}}} 100) "50")
-
-
-(check-equal? (top-interp
-               '{substring "Hello World" 0 4} 100) "\"Hell\"")
-
 (check-exn #rx"Invalid identifier in AAQZ4"
            (lambda ()
              (top-interp
                '{bind [=> = "This is invalid"]
                       =>} 100)))
-
 
 (check-exn #rx"Invalid identifier in AAQZ4"
            (lambda ()
@@ -722,24 +725,6 @@
            (lambda ()
              (top-interp '(make-array 1001 "abc") 1000)))
 
-
-
-(check-equal? (top-interp
-               '{bind [arr = {array 10 20 30 40}]
-                      {equal? arr arr}} 100) "true")
-
-(check-equal? (top-interp
-               '{bind [arr = {array 10 20 30 40}]
-                      [arr2 = {array 10 20 30 40}]
-                      {equal? arr arr2}} 100) "false")
-
-(check-equal? (top-interp
-               '{bind [arr = {array 10 20 30 40}]
-                      {bind [arr2 = arr]
-                            {equal? arr arr2}}} 100) "true")
-
-
-
 (check-exn #rx"AAQZ cant parse nothin >:"
            (lambda ()
              (parse '())))
@@ -747,8 +732,6 @@
 (check-exn #rx"Not correct binding format in AAQZ"
            (lambda ()
              (parse '(bind (x = 3) 3 4))))
-
-
 
 ;;code
 
@@ -782,6 +765,7 @@
                                                increasing}}}}
               inorder}})
 
+;; Special test case for while and in order
 (check-equal?
  (top-interp `{bind [while = ,while]
                     {bind  [in-order = ,in-order]
