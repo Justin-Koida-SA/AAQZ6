@@ -169,7 +169,7 @@
      (if (and (numV? interp-l) (numV? interp-r))
          (if (not (= (numV-n interp-r) 0))
              (numV (/ (numV-n interp-l) (numV-n interp-r)))
-             (error "AAQZ4 cant divide by zero"))
+             (error "AAQZ cant divide by zero"))
          (error  "AAQZ needs numV inputs with operator" '/))]
     [(list (primV '<=) (list l r))
      (define interp-l (interp l env store))
@@ -197,7 +197,7 @@
      (if (numV? s) 
          (if (natural? (numV-n s))
              (arrV (make-array-helper (numV-n s) fv store) (cast (numV-n s) Integer))
-             (error "AAQZ can only make array with size bigger than or equal to 1 got: ~a" size))
+             (error "AAQZ can only make array with size bigger than or equal to 1 for make-array got: " size))
          (error "AAQZ needs a number for size to make array but got ~a" size))]
     [(list (primV 'array) (list args ...))
      (if (empty? args)
@@ -209,8 +209,8 @@
      (if (and (arrV? got-arr) (numV? interp-in))
          (if (and (> (arrV-size got-arr) (numV-n interp-in)) (> (numV-n interp-in) -1))
              (vector-ref store (+ (arrV-start got-arr) (cast (numV-n interp-in) Integer)))
-             (error "AAQZ index out of range in aref :P size is ~a index ~a" (arrV-size got-arr) (numV-n interp-in)))
-         (error "AAQZ expects an array and integer as input but got ~a and ~a" arr index))]
+             (error "AAQZ index out of range in aref :P size and index are:" (arrV-size got-arr) (numV-n interp-in)))
+         (error "AAQZ expects an array and integer as input in aref but got" arr index))]
     [(list (primV 'aset!) (list arr index value))
      (define got-arr (interp arr env store))
      (define interp-in (interp index env store))
@@ -222,7 +222,7 @@
                         (nullV))
                  (error "AAQZ needs an integer to set array"))
              (error "AAQZ index out of range when calling aset! :P"))
-         (error "AAQZ expects an array and integer as input but got ~a and ~a" arr index))]
+         (error "AAQZ expects an array and integer as input in aset! but got" arr index))]
     [(list (primV 'substring) (list str start end))
      (define s (interp str env store))
      (define in-start (interp start env store))
@@ -275,7 +275,7 @@
   (match (list l1 l2)
     [(list '() '()) '()]
     [(list (cons f1 r1) (cons f2 r2)) (cons (binding f1 (update-store f2 store)) (bind r1 r2 store))]
-    [other (error 'bind "Number of variables and arguments do not match AAQZ4: ~a" other)]))
+    [other (error 'bind "Number of variables and arguments do not match while binding AAQZ: ~a" other)]))
 
 ;;takes in a value and a store and return the location that the value has been stored to
 (define (update-store [store-val : Value] [store : (Vectorof Value)]) : Integer
@@ -314,7 +314,7 @@
      (appC (lamC (check-duplicate-arg (bindpair-funName pClause)) (parse expr)) (bindpair-fun pClause))]
     [(list (list args ...) '=> body)
      (cond
-       [(not (andmap symbol? args)) (error 'parse "AAQZ Expected a list of symbols for arguments got ~a" args)]
+       [(not (andmap symbol? args)) (error 'parse "AAQZ Expected a list of symbols for arguments in parse got ~a" args)]
        [else (lamC (check-duplicate-arg args) (parse body))])]
     [(list (? symbol? s) ':= new)
      (bindC s (parse new))]
@@ -324,7 +324,7 @@
     [(list s args ...) (appC (parse s) (map parse args))]
     [(? symbol? s)
      (if (hash-has-key? invalid-table s)
-         (error 'parse "Invalid identifier: ~a in AAQZ4" prog)
+         (error 'parse "Found invalid identifier: ~a in AAQZ" prog)
          (idC s))]
     ['() (error "AAQZ cant parse nothin >:")]
     ))
@@ -336,7 +336,7 @@
     ['() (bindpair '() '())]
     [(cons (list (? symbol? id) '= expr) r)
      (if (hash-has-key? invalid-table id)
-         (error 'parse-binds "Invalid identifier in AAQZ4 ~a " id)
+         (error 'parse-binds "Invalid identifier in AAQZ ~a " id)
          (let* ([parsed-rest (parse-binds r)]
                 [ids (cons id (bindpair-funName parsed-rest))]
                 [exprs (cons (parse expr) (bindpair-fun parsed-rest))])
@@ -357,7 +357,7 @@
     ['() new]
     [(cons arg rest)
      (if (equal? new arg)
-         (error "AAQZ4 found a syntax error repeated argument name\n")
+         (error "AAQZ found repeated argument name in check-duplicate-arg-helper")
          (check-duplicate-arg-helper new rest))]))
 
 
@@ -556,7 +556,7 @@
 
 
 ;; Exception test cases. Making sure our errors work
-(check-exn #rx"AAQZ4 found a syntax error repeated argument name\n"
+(check-exn #rx"AAQZ found repeated argument name"
            (lambda ()
              (top-interp
                '{{(add1) => {add1 42}}
@@ -568,7 +568,7 @@
                '{bind [arr = {make-array "stop" 2}]
                       arr} 100) ))
 
-(check-exn #rx"AAQZ can only make array with size bigger than or equal to 1 got:"
+(check-exn #rx"AAQZ can only make array with size bigger than or equal to 1 for make-array got"
            (lambda () 
              (top-interp
                '{bind [arr = {make-array -10 2}]
@@ -580,7 +580,7 @@
                '{bind [j = {array}]
                       j} 100)))
 
-(check-exn #rx"Number of variables and arguments do not match AAQZ4"
+(check-exn #rx"Number of variables and arguments do not match while binding AAQZ"
            (lambda ()
              (top-interp
                '{{(div3) => {div3 9 5}}
@@ -615,7 +615,7 @@
                '{{(prim) => {prim "42"}}
                 {(x) => {/ x 1}}} 100)))
 
-(check-exn #rx"AAQZ4 cant divide by zero"
+(check-exn #rx"AAQZ cant divide by zero"
            (lambda ()
              (top-interp
                '{{(prim) => {prim 42}}
@@ -646,7 +646,7 @@
                 {(4) => {equal? true x}}} 100)))
 
 
-(check-exn #rx"parse: Invalid identifier"
+(check-exn #rx"parse: Found invalid identifier"
            (lambda ()
              (top-interp
                'if 100)))
@@ -656,23 +656,23 @@
              (top-interp
               '(3 4 5) 100)))
 
-(check-exn #rx"Number of variables and arguments do not match AAQZ4"
+(check-exn #rx"Number of variables and arguments do not match while binding AAQZ"
            (lambda ()
              (top-interp '((() => 9) 17) 100)))
 
-(check-exn #rx"AAQZ index out of range in aref :P size is"
+(check-exn #rx"AAQZ index out of range in aref :P size and index are:"
            (lambda ()
              (top-interp
                '{bind [arr = {array 10 20 30 40}]
                        {aref arr 10}} 100)))
 
-(check-exn #rx"AAQZ expects an array and integer as input but got"
+(check-exn #rx"AAQZ expects an array and integer as input in aref but got"
            (lambda ()
              (top-interp
                '{bind [arr = {array 10 20 30 40}]
                        {aref arr "hey"}} 100)))
 
-(check-exn #rx"AAQZ expects an array and integer as input but got"
+(check-exn #rx"AAQZ expects an array and integer as input in aset! but got"
            (lambda ()
              (top-interp
                '{bind [arr = {array 10 20 30 40}]
@@ -705,13 +705,13 @@
                '{bind [j = "hello"]
                       {k := "heh"}} 100)))
 
-(check-exn #rx"Invalid identifier in AAQZ4"
+(check-exn #rx"Invalid identifier in AAQZ"
            (lambda ()
              (top-interp
                '{bind [=> = "This is invalid"]
                       =>} 100)))
 
-(check-exn #rx"Invalid identifier in AAQZ4"
+(check-exn #rx"Invalid identifier in AAQZ"
            (lambda ()
              (top-interp
                '{bind [=> = "This is invalid"]
