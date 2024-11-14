@@ -755,7 +755,6 @@
 
 
 
-
 ;;code
 
 #;(define (while) "hihi")
@@ -763,9 +762,9 @@
 (define while
   '{bind [while = "bogus"]
                    {seq {while := {(cond body) =>
-                                                    {if cond
-                                                        {seq body {while cond body}}
-                                                        nullV}}}
+                                                    {if {cond}
+                                                        {seq {body} {while cond body}}
+                                                        null}}}
                         while}})
 
 #;(top-interp (while) 100)
@@ -774,23 +773,23 @@
 
 
 (define in-order
-  '{bind [inorder ="bogus"]
-         [index = 0]
-         [increasing = true]
+  '{bind [inorder = "bogus"]         
          {seq {inorder := {(array size) =>
-                                        {seq
-                                         {while
-                                          (<= (+ index 2) size)
-                                          (if (<= (aref array (+ 1 index)) (aref array index))
-                                              (increasing := false)
-                                              (seq
-                                               {index := {+ 1 index}}
-                                               (inorder array size)))
-                                          }
-                                         increasing}}}
-              {inorder {array 10 20 30} 3 }}})
- 
-#;(if (<= size (+ index 1))
+                                        {bind [index = 0] [increasing = true]
+                                              {seq
+                                               {while
+                                                (() => (<= (+ index 2) size))
+                                                (() =>
+                                                    (if (<= (aref array (+ 1 index)) (aref array index))
+                                                        {seq
+                                                         (increasing := false)
+                                                         {index := {+ index 1}}}
+                                                        {index := {+ 1 index}}))
+                                                }
+                                               increasing}}}}
+              inorder}})
+
+#;(if (<= size (+ index 1)) 
       true
       (if (<= (aref array (+ 1 index)) (aref array index))
           false
@@ -798,9 +797,12 @@
            {index := {+ 1 index}}
            (inorder array size))))
 
-#;(top-interp `{bind [while = ,while]
-                   {bind  [in-order = ,in-order]
-                          {in-order {array 10 20 30} 3}}} 100)
+(check-equal?
+ (top-interp `{bind [while = ,while]
+                    {bind  [in-order = ,in-order]
+                           {+ {if {in-order {array 3 6 8} 3} 1 0}
+                              {if {in-order {array 3 8 6} 3} 0 1}}}} 100)
+ "2")
 
 #;(top-interp '{bind [fact = "bogus"]
       {seq {fact := {(x) => {if {equal? x 0}
