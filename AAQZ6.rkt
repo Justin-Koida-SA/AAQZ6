@@ -87,7 +87,7 @@
 ;; takes in a symbol to be looked up in an environment and returns its corresponding value
 (define (lookup [for : Symbol] [env : Environment] [store : (Vectorof Value)]) : Value
   (match env
-    ['() (error 'lookup "user-error AAQZ4 found an unbound variable: ~a ~a" for env)]
+    ['() (error 'lookup "user-error AAQZ found an unbound variable: ~a ~a" for env)]
     [(cons (binding name (? natural? location)) rest)
      (if (symbol=? for name)
          (vector-ref store location)
@@ -119,12 +119,12 @@
      (match resolved-f
        [(primV _) (do-math resolved-f a env store)]
        [(closV args body nenv) (app-intrp-helper resolved-f (interp-args a env store) store)]
-       [other (error "AAQZ4 needs a function that we can apply got: ~a" other)])]
+       [other (error "AAQZ needs a function that we can apply got: ~a" other)])]
     [(ifC test then else)
      (define interped-test (interp test env store))
      (if (if (boolV? interped-test) 
              (boolV-bool interped-test)
-             (error "AAQZ4 needs a bool to do if ops"))
+             (error "AAQZ needs a boolean for the test clause to do if ops"))
            (interp then env store)
            (interp else env store))]))
 
@@ -150,19 +150,19 @@
      (define interp-r (interp r env store))
      (if (and (numV? interp-l) (numV? interp-r))
          (numV (+ (numV-n interp-l) (numV-n interp-r)))
-         (error  "AAQZ4 need an integer with ~a operator" '+))]
+         (error  "AAQZ needs numV inputs with operator" '+))]
     [(list (primV '-) (list l r))
      (define interp-l (interp l env store))
      (define interp-r (interp r env store))
      (if (and (numV? interp-l) (numV? interp-r))
          (numV (- (numV-n interp-l) (numV-n interp-r)))
-         (error  "AAQZ4 need an integer with ~a operator" '-))]
+         (error  "AAQZ needs numV inputs with operator" '-))]
     [(list (primV '*) (list l r))
      (define interp-l (interp l env store))
      (define interp-r (interp r env store))
      (if (and (numV? interp-l) (numV? interp-r))
          (numV (* (numV-n interp-l) (numV-n interp-r)))
-         (error  "AAQZ4 need an integer with ~a operator" '*))]
+         (error  "AAQZ needs numV inputs with operator" '*))]
     [(list (primV '/) (list l r))
      (define interp-l (interp l env store))
      (define interp-r (interp r env store))
@@ -170,13 +170,13 @@
          (if (not (= (numV-n interp-r) 0))
              (numV (/ (numV-n interp-l) (numV-n interp-r)))
              (error "AAQZ4 cant divide by zero"))
-         (error  "AAQZ4 need an integer with ~a operator" '/))]
+         (error  "AAQZ needs numV inputs with operator" '/))]
     [(list (primV '<=) (list l r))
      (define interp-l (interp l env store))
      (define interp-r (interp r env store))
      (if (and (numV? interp-l) (numV? interp-r))
          (boolV (<= (numV-n interp-l) (numV-n interp-r)))
-         (error  "AAQZ4 need an integer with ~a operator" '<=))]
+         (error "AAQZ needs numV inputs with operator" '<=))]
     [(list (primV 'equal?) (list l r))
      (define interp-l (interp l env store))
      (define interp-r (interp r env store))
@@ -209,7 +209,7 @@
      (if (and (arrV? got-arr) (numV? interp-in))
          (if (and (> (arrV-size got-arr) (numV-n interp-in)) (> (numV-n interp-in) -1))
              (vector-ref store (+ (arrV-start got-arr) (cast (numV-n interp-in) Integer)))
-             (error "AAQZ index out of range :P size is ~a index ~a" (arrV-size got-arr) (numV-n interp-in)))
+             (error "AAQZ index out of range in aref :P size is ~a index ~a" (arrV-size got-arr) (numV-n interp-in)))
          (error "AAQZ expects an array and integer as input but got ~a and ~a" arr index))]
     [(list (primV 'aset!) (list arr index value))
      (define got-arr (interp arr env store))
@@ -221,7 +221,7 @@
                                      (interp value env store))
                         (nullV))
                  (error "AAQZ needs an integer to set array"))
-             (error "AAQZ index out of range :P"))
+             (error "AAQZ index out of range when calling aset! :P"))
          (error "AAQZ expects an array and integer as input but got ~a and ~a" arr index))]
     [(list (primV 'substring) (list str start end))
      (define s (interp str env store))
@@ -233,7 +233,7 @@
        [(_ _ _) (error "AAQZ expects input str int int for substring but got ~a  ~a ~a" str start end)])]
     [(list (primV 'error) (list v))
      (error "user error " (serialize (interp v env store)))]
-    [other (error "wrong number of variable for primV AAQZ4: ~a" other)]))
+    [other (error "wrong number of variable for primV AAQZ: ~a" other)]))
 
 ;; Takes in a size of an array, a fill Value and the store and recursively adds the fill Value to the store
 ;; until the size is 0. Essentially creating an array of length size with each element being the fill Value
@@ -586,30 +586,30 @@
                '{{(div3) => {div3 9 5}}
                 {(x) => {/ x 3}}} 100)))
  
-(check-exn #rx"AAQZ4 need an integer"
+(check-exn #rx"AAQZ needs numV inputs with operator '+"
            (lambda ()
              (top-interp
                '{{(prim) => {prim "42"}}
                 {(x) => {+ x 1}}} 100)))
 
-(check-exn #rx"AAQZ4 needs a bool to do if ops"
+(check-exn #rx"AAQZ needs a boolean for the test clause to do if ops"
            (lambda ()
              (top-interp
                '{if "true" 42 43} 100)))
 
-(check-exn #rx"AAQZ4 need an integer"
+(check-exn #rx"AAQZ needs numV inputs with operator '*"
            (lambda ()
              (top-interp
                '{{(prim) => {prim "42"}}
                 {(x) => {* x 1}}} 100)))
 
-(check-exn #rx"AAQZ4 need an integer"
+(check-exn #rx"AAQZ needs numV inputs with operator '-"
            (lambda ()
              (top-interp
                '{{(prim) => {prim "42"}}
                 {(x) => {- x 1}}} 100)))
 
-(check-exn #rx"AAQZ4 need an integer"
+(check-exn #rx"AAQZ needs numV inputs with operator '/"
            (lambda ()
              (top-interp
                '{{(prim) => {prim "42"}}
@@ -621,19 +621,19 @@
                '{{(prim) => {prim 42}}
                 {(x) => {/ x 0}}} 100))) 
 
-(check-exn #rx"lookup: user-error AAQZ4 found an unbound variable"
+(check-exn #rx"lookup: user-error AAQZ found an unbound variable"
            (lambda ()
              (top-interp
                '{{(prim) => {prim 2}}
                 {(x) => {/ x y}}} 100)))
 
-(check-exn #rx"AAQZ4 need an integer"
+(check-exn #rx"AAQZ needs numV inputs with operator '<="
            (lambda ()
              (top-interp
                '{{(prim) => {prim "2"}}
                 {(x) => {<= x 3}}} 100)))
 
-(check-exn #rx"wrong number of variable for primV AAQZ4"
+(check-exn #rx"wrong number of variable for primV AAQZ"
            (lambda ()
              (top-interp
                '{{(prim) => {prim 42}}
@@ -651,7 +651,7 @@
              (top-interp
                'if 100)))
 
-(check-exn #rx"AAQZ4 needs a function that we can apply got"
+(check-exn #rx"AAQZ needs a function that we can apply got"
            (lambda ()
              (top-interp
               '(3 4 5) 100)))
@@ -660,7 +660,7 @@
            (lambda ()
              (top-interp '((() => 9) 17) 100)))
 
-(check-exn #rx"AAQZ index out of range :P size is"
+(check-exn #rx"AAQZ index out of range in aref :P size is"
            (lambda ()
              (top-interp
                '{bind [arr = {array 10 20 30 40}]
@@ -678,7 +678,7 @@
                '{bind [arr = {array 10 20 30 40}]
                        {aset! arr "hey" 30}} 100)))
  
-(check-exn #rx"AAQZ index out of range :P"
+(check-exn #rx"AAQZ index out of range when calling aset! :P"
            (lambda ()
              (top-interp
                '{bind [arr = {array 10 20 30 40}]
@@ -772,7 +772,6 @@
                            {+ {if {in-order {array 3 6 8} 3} 1 0}
                               {if {in-order {array 3 8 6} 3} 0 1}}}} 100)
  "2")
-
 
 
 
